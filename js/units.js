@@ -159,13 +159,22 @@ function stepPath(u) {
         blocker.faction !== u.faction && blocker.armorType === 'infantry') {
       dealDmg(blocker, blocker.maxHp + 1, u);
     } else {
-      if (state.tick % 15 === 0) {
+      // If blocker is moving, wait for it to clear rather than re-pathing immediately
+      if (blocker.path && blocker.path.length > 0) {
+        u.blockWait = (u.blockWait || 0) + 1;
+        if (u.blockWait < 16) return;
+      }
+      u.blockWait = 0;
+      // Stagger re-path by unit id so adjacent units don't oscillate in sync
+      if ((state.tick + (u.id % 13)) % 15 === 0) {
         const dest = u.path[u.path.length - 1];
         u.path = astar(u.x, u.y, dest.x, dest.y, false);
         u.mprog = 0;
       }
       return;
     }
+  } else {
+    u.blockWait = 0;
   }
   u.mprog += u.speed / TS;
   if (u.mprog >= 1) {
