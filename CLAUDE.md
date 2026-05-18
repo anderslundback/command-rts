@@ -84,3 +84,4 @@ All entity updates happen in `game.js`'s `loop()`. The loop calls `syncFromGameS
 - React components use inline styles for layout; CSS classes (`.build-btn`, `.build-tab`, `.faction-btn`, `.pause-btn`) for interactive styling that needs hover states
 - TypeScript strict mode; `any` is acceptable at JS/TS boundaries
 - `syncFromGameState()` is the only bridge from JS engine → React; call it after any state change that React needs to reflect
+- **Zustand selectors must be primitive:** `useUIStore(s => ({ a: s.a, b: s.b }))` returns a new object reference each render and triggers React 18's `useSyncExternalStore` infinite-loop guard. Always select one primitive at a time: `const a = useUIStore(s => s.a); const b = useUIStore(s => s.b);`

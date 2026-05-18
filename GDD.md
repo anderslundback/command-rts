@@ -1,6 +1,6 @@
 # COMMAND — Game Design Document
 
-Version 0.1 | 2026-05-18
+Version 0.2 | 2026-05-18
 
 ---
 
@@ -58,35 +58,33 @@ Destroy all enemy Command Centers → Victory
 
 ### Construction Structures
 
-| Building | Function | Prereqs | Notes |
-|---|---|---|---|
-| Command Center | HQ; required for all construction adjacency; losing it is not immediately fatal but losing all buildings ends the faction | None | Player must protect this above all else |
-| Power Plant | Generates power; buildings and turrets require power to operate | Command Center | Build early; shortfalls disable structures |
-| Barracks | Trains Riflemen and Rocketeers | Command Center + Power | Provides basic infantry production |
-| War Factory | Trains Harvesters, Tanks, and MCV | Command Center + Power | Core vehicle production facility |
-| Refinery | Stores harvested ore; Harvesters deliver here to convert ore to credits | Command Center + Power | More Refineries = more storage capacity |
-| Service Depot | Repairs vehicles; unlocks MCV production at the War Factory | War Factory | Required prereq before MCV can be trained |
-| Radar | Unlocks extended map information | Command Center + Power | Precise effect TBD in implementation |
+| Building | Cost | HP | Power | Prereqs | Notes |
+|---|---|---|---|---|---|
+| Command Center | — | 1200 | −2 | None | Player must protect this above all else |
+| Power Plant | $300 | 350 | +5 | Command Center | Build early; shortfalls disable structures |
+| Barracks | $400 | 500 | −1 | Command Center + Power | Trains Riflemen and Rocketeers |
+| War Factory | $700 | 700 | −2 | Command Center + Power | Core vehicle production facility |
+| Refinery | $500 | 600 | −1 | Command Center + Power | Harvesters deliver here; more Refineries = more storage |
+| Service Depot | $600 | 450 | −1 | War Factory | Repairs vehicles; unlocks MCV at War Factory |
+| Radar | TBD | — | −1 | Command Center + Power | Precise effect TBD in implementation |
 
 ### Defence Structures
 
-| Building | Function | Prereqs | Notes |
-|---|---|---|---|
-| Turret | Auto-attacks enemies within range using `gun` weapon type | Power Plant (active power) | Stops firing when power is insufficient |
-
-> **Costs:** Specific credit costs are not yet defined in this document. All costs are marked — pending balance pass.
+| Building | Cost | HP | Power | Prereqs | Notes |
+|---|---|---|---|---|---|
+| Turret | $350 | 280 | −1 | Barracks | ATK 18, RNG 6; stops firing without power |
 
 ---
 
 ## 5. Units
 
-| Unit | Trains From | Role | Weapon Type | Notes |
-|---|---|---|---|---|
-| Rifleman | Barracks | Light anti-infantry | small_arms | Cheap, fast to train; weak vs. armor |
-| Rocketeer | Barracks | Anti-armor infantry | rockets | Effective vs. vehicles and structures |
-| Harvester | War Factory | Economy — collects ore | None (unarmed) | Automatically pathfinds to ore and returns to Refinery |
-| Tank | War Factory | Heavy assault vehicle | cannon | BROTHERHOOD gets cheaper tanks + HP bonus |
-| MCV | War Factory | Mobile Command Vehicle | None (unarmed) | Deploying it (F / button) creates a new Command Center on the spot; requires Service Depot as prereq |
+| Unit | Cost | HP | Trains From | Role | Weapon Type | Notes |
+|---|---|---|---|---|---|---|
+| Rifleman | $200 | 80 | Barracks | Light anti-infantry | small_arms | Cheap, fast to train; weak vs. armor |
+| Rocketeer | $350 | 60 | Barracks | Anti-armor infantry | rockets | Effective vs. vehicles and structures |
+| Harvester | $800 | 200 | War Factory | Economy — collects ore | None (unarmed) | Automatically pathfinds to ore and returns to Refinery |
+| Tank | $650 | 320 | War Factory | Heavy assault vehicle | cannon | BROTHERHOOD gets cheaper tanks + HP bonus |
+| MCV | $1200 | 300 | War Factory | Mobile Command Vehicle | None (unarmed) | Deploying (F) creates a new Command Center; requires Service Depot |
 
 ---
 
