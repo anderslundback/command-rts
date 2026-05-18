@@ -5,7 +5,7 @@ import { T } from './constants.js';
 import { Building, Unit, addEnt } from './entities.js';
 import { calcPower } from './resources.js';
 
-export function canPlace(type, tx, ty, faction = -1) {
+export function canPlace(type, tx, ty, faction = -1, skipAdjacency = false) {
   const d = BDEF[type];
   if (tx < 0 || ty < 0 || tx + d.w > 80 || ty + d.h > 60) return false;
   for (let dy = 0; dy < d.h; dy++)
@@ -15,7 +15,7 @@ export function canPlace(type, tx, ty, faction = -1) {
     if (e.dead || !e.isBuilding) continue;
     if (tx < e.x + e.w && tx + d.w > e.x && ty < e.y + e.h && ty + d.h > e.y) return false;
   }
-  if (faction === state.playerFaction) {
+  if (!skipAdjacency && faction === state.playerFaction) {
     const own = state.entities.filter(e => !e.dead && e.isBuilding && e.faction === faction);
     if (own.length > 0) {
       const MAX = 3;
@@ -30,8 +30,8 @@ export function canPlace(type, tx, ty, faction = -1) {
   return true;
 }
 
-export function placeBuilding(f, type, tx, ty, instant) {
-  if (!canPlace(type, tx, ty)) return null;
+export function placeBuilding(f, type, tx, ty, instant, skipAdjacency = false) {
+  if (!canPlace(type, tx, ty, f, skipAdjacency)) return null;
   const b = new Building(f, type, tx, ty);
   if (instant) b.bprog = 1;
   addEnt(b);
@@ -63,6 +63,27 @@ export function spawnNear(f, type, building) {
       { x: building.x + building.w, y: building.y + i },
     ]) {
       if (trySpawn(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
+    }
+  }
+  return null;
+}
+
+export function deployMcvInPlace(mcv) {
+  // Try all positions where the MCV tile falls within a 3×3 command center footprint
+  const candidates = [
+    [-1, -1], [0, -1], [-1, 0], [-2, -1], [-1, -2],
+    [0, 0], [-2, 0], [0, -2], [-2, -2],
+  ];
+  for (const [dx, dy] of candidates) {
+    const tx = mcv.x + dx, ty = mcv.y + dy;
+    if (canPlace('command', tx, ty, -1, true)) {
+      mcv.dead = true;
+      const b = new Building(mcv.faction, 'command', tx, ty);
+      b.bprog = 1;
+      addEnt(b);
+      calcPower();
+      state.minimapDirty = true;
+      return b;
     }
   }
   return null;

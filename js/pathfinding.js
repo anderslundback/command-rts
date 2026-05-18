@@ -61,7 +61,7 @@ export function astar(sx, sy, ex, ey, ignoreUnits) {
   open.push({ x: sx, y: sy, f: Math.abs(sx - ex) + Math.abs(sy - ey) });
 
   let iters = 0;
-  while (open.size > 0 && ++iters < 900) {
+  while (open.size > 0 && ++iters < 3000) {
     const cur = open.pop();
     const ck = cur.y * MW + cur.x;
     if (closed[ck]) continue;

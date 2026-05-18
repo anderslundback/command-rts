@@ -4,13 +4,36 @@ import { getTile, nearestOre } from './map.js';
 import { T } from './constants.js';
 import { getEnt } from './entities.js';
 import { astar, adjTile, adjToBuilding, distToEnt } from './pathfinding.js';
-import { nearestRefinery } from './resources.js';
+import { nearestRefinery, hasPwr } from './resources.js';
 import { dealDmg, autoAttack } from './combat.js';
 import { orderHarvest } from './orders.js';
 import { playShot, playCash } from './audio.js';
 
 export function updateUnit(u) {
   if (u.hitFlash > 0) u.hitFlash--;
+
+  // Depot auto-repair for vehicles
+  if ((u.type === 'tank' || u.type === 'harvester' || u.type === 'mcv') && u.hp < u.maxHp) {
+    if (state.tick % 3 === 0 && hasPwr(u.faction)) {
+      const depot = state.entities.find(e => !e.dead && e.isBuilding && e.faction === u.faction &&
+        e.type === 'depot' && e.done && adjToBuilding(u.x, u.y, e));
+      if (depot && state.credits[u.faction] >= 0.15) {
+        state.credits[u.faction] -= 0.15;
+        u.hp = Math.min(u.maxHp, u.hp + 2);
+        u.hitFlash = 0;
+      }
+    }
+  }
+
+  // Crush any enemy infantry sharing this tile (handles infantry walking into a vehicle)
+  if (u.type === 'tank' || u.type === 'harvester' || u.type === 'mcv') {
+    for (const e of state.entities) {
+      if (!e.dead && e.isUnit && e !== u && e.x === u.x && e.y === u.y &&
+          e.faction !== u.faction && e.armorType === 'infantry') {
+        dealDmg(e, e.maxHp + 1, u);
+      }
+    }
+  }
 
   switch (u.state) {
     case 'idle':
@@ -55,8 +78,8 @@ export function updateUnit(u) {
     case 'harvest': {
       const ht = u.harvestTile;
       if (!ht || getTile(ht.x, ht.y) !== T.ORE) {
-        const ore = nearestOre(u.x, u.y);
-        if (ore) { u.harvestTile = ore; u.path = astar(u.x, u.y, ore.x, ore.y, true); u.mprog = 0; }
+        const found = findReachableOre(u);
+        if (found) { u.harvestTile = found.tile; u.path = found.path; u.mprog = 0; }
         else u.state = 'idle';
         break;
       }
@@ -66,15 +89,17 @@ export function updateUnit(u) {
         if (u.ore >= u.maxOre) {
           startReturn(u);
         } else {
-          const ore = nearestOre(u.x, u.y);
-          if (ore) { u.harvestTile = ore; u.path = astar(u.x, u.y, ore.x, ore.y, true); u.mprog = 0; }
+          const found = findReachableOre(u);
+          if (found) { u.harvestTile = found.tile; u.path = found.path; u.mprog = 0; }
           else startReturn(u);
         }
       } else {
         stepPath(u);
         if (!u.path.length && (u.x !== ht.x || u.y !== ht.y)) {
-          u.path = astar(u.x, u.y, ht.x, ht.y, true);
-          u.mprog = 0;
+          // Current target unreachable — try to find a different ore patch
+          const found = findReachableOre(u);
+          if (found) { u.harvestTile = found.tile; u.path = found.path; u.mprog = 0; }
+          else u.state = 'idle';
         }
       }
       break;
@@ -101,6 +126,18 @@ export function updateUnit(u) {
       break;
     }
   }
+}
+
+function findReachableOre(u) {
+  const exclude = new Set();
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const ore = nearestOre(u.x, u.y, exclude);
+    if (!ore) return null;
+    const path = astar(u.x, u.y, ore.x, ore.y, true);
+    if (path.length > 0) return { tile: ore, path };
+    exclude.add(ore.y * 80 + ore.x);
+  }
+  return null;
 }
 
 function startReturn(u) {

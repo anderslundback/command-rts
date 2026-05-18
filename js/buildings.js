@@ -7,7 +7,7 @@ import { spawnNear, placeBuilding } from './placement.js';
 import { orderMove, orderHarvest } from './orders.js';
 import { distToEnt } from './pathfinding.js';
 import { setMsg } from './hud.js';
-import { speak, playShot } from './audio.js';
+import { speak, speakUnit, speakBuilding, playShot } from './audio.js';
 
 export function updateBuilding(b) {
   if (b.hitFlash > 0) b.hitFlash--;
@@ -67,7 +67,7 @@ export function updateBuilding(b) {
             const ref = nearestRefinery(b.faction, u.x, u.y);
             if (ref) orderHarvest(u, ref);
           }
-          if (b.faction === state.playerFaction) speak('Unit ready');
+          if (b.faction === state.playerFaction) speakUnit(item.type);
         }
       }
     }
@@ -99,23 +99,17 @@ export function updateBuilding(b) {
   }
 }
 
-// Called once per game tick: advances the player's sidebar construction queue
+// Called once per game tick: advances both sidebar construction queues independently
 export function updateSidebarQueues() {
   const f = state.playerFaction;
-  const q = state.hudBuildQueue[f];
+  advanceQueue(state.hudBuildQueue[f], f);
+  advanceQueue(state.hudDefQueue[f], f);
+}
+
+function advanceQueue(q, f) {
   if (!q.length) return;
   const item = q[0];
-
-  if (item.ready) {
-    // Auto-enter placement exactly once. After that, player clicks PLACE manually.
-    // This prevents ESC from being overridden on the next tick.
-    if (!item.notified) {
-      item.notified = true;
-      state.buildMode = item.type;
-      state.buildReady = true;
-    }
-    return;
-  }
+  if (item.ready) return; // waiting for player to click PLACE
 
   if (item.total > 0) {
     const installment = BDEF[item.type].cost / item.total;
@@ -124,15 +118,13 @@ export function updateSidebarQueues() {
       item.paid = (item.paid || 0) + installment;
       item.t++;
     }
-    // stalls when broke — resumes when credits arrive
   } else {
     item.t = 1; item.total = 1;
   }
 
   if (item.t >= item.total) {
     item.ready = true;
-    item.notified = false;
     setMsg(BDEF[item.type].name + ' ready — click PLACE', 300);
-    speak('Construction complete');
+    speakBuilding(item.type);
   }
 }

@@ -6,84 +6,8 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-
-<div id="hud">
-  <span id="hud-faction">ALLIANCE</span>
-  <span class="hud-sep">|</span>
-  <span class="hud-stat">Credits: <b id="hud-credits">0</b></span>
-  <span class="hud-sep">|</span>
-  <span class="hud-stat">Power: <b id="hud-power" style="color:#fd4">0</b> / <b id="hud-pmax" style="color:#888">0</b></span>
-  <span id="hud-msg"></span>
-  <span id="hud-fps">-- FPS</span>
-</div>
-
-<div id="game-area">
-  <canvas id="canvas"></canvas>
-
-  <div id="sidebar">
-    <canvas id="radar" width="200" height="160" title="Click to navigate"></canvas>
-    <div id="power-bar-wrap">
-      <div id="power-label">PWR</div>
-      <div id="power-bar-track"><div id="power-bar-fill"></div></div>
-    </div>
-    <div id="info-panel">
-      <div id="info-content" style="color:#334">No selection</div>
-    </div>
-    <div id="build-panel">
-      <div id="build-tabs">
-        <button class="build-tab active" id="tab-build" onclick="UI.switchTab('build')">BUILD</button>
-        <button class="build-tab" id="tab-train" onclick="UI.switchTab('train')">TRAIN</button>
-      </div>
-      <div id="build-buttons"></div>
-    </div>
-  </div>
-</div>
-
-<div id="overlay">
-  <div id="menu">
-    <h1>COMMAND</h1>
-    <div class="subtitle">Destroy all enemy buildings to win</div>
-    <button class="faction-btn" style="color:#4af;border-color:#2a4a6a" data-faction="0">
-      <div class="fname">ALLIANCE</div>
-      <div class="fdesc">Balanced forces · Standard stats across the board</div>
-    </button>
-    <button class="faction-btn" style="color:#f64;border-color:#6a2a1a" data-faction="1">
-      <div class="fname">BROTHERHOOD</div>
-      <div class="fdesc">Heavy armor · +30% HP, cheaper tanks, slower economy</div>
-    </button>
-    <button class="faction-btn" style="color:#4d8;border-color:#1a5a2a" data-faction="2">
-      <div class="fname">SYNDICATE</div>
-      <div class="fdesc">Swift economy · +30% credits, faster units, lighter armor</div>
-    </button>
-    <div class="hint">
-      LMB select · RMB move/attack · Drag box-select<br>
-      B = Build tab · T = Train tab · Sidebar always shows available options<br>
-      Ctrl+A select all · Double-click select all of type · H jump to base · P / ESC pause
-    </div>
-  </div>
-</div>
-
-<div id="pause">
-  <div id="pause-menu">
-    <div id="pause-title">PAUSED</div>
-    <button class="pause-btn" id="pause-resume">RESUME</button>
-    <button class="pause-btn" id="pause-settings">SETTINGS</button>
-    <button class="pause-btn" id="pause-quit">QUIT TO MENU</button>
-    <div id="settings-panel" style="display:none">
-      <div class="settings-row">
-        <label for="vol-slider">VOLUME</label>
-        <input type="range" id="vol-slider" min="0" max="1" step="0.05" value="0.5">
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="gameover">
-  <h2 id="go-title">VICTORY</h2>
-  <p id="go-sub"></p>
-  <button id="go-btn">MAIN MENU</button>
-</div>
-
-<script type="module" src="js/main.js"></script>
+<canvas id="canvas"></canvas>
+<div id="ui-root"></div>
+<script type="module" src="js/main.ts"></script>
 </body>
 </html>

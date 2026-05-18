@@ -1,10 +1,10 @@
-import { TS, MW, MH, BDEF, FBONUSES } from './constants.js';
+import { TS, MW, MH, BDEF, UDEF, FBONUSES } from './constants.js';
 import { state } from './state.js';
 import { getEnt, getEntAt } from './entities.js';
 import { getTile } from './map.js';
 import { T } from './constants.js';
 import { astar } from './pathfinding.js';
-import { canPlace, placeBuilding } from './placement.js';
+import { canPlace, placeBuilding, deployMcvInPlace } from './placement.js';
 import { nearestRefinery, calcPower } from './resources.js';
 import { orderMove, orderAttack, orderHarvest } from './orders.js';
 import { setMsg, updateBuildPanel, switchTab } from './hud.js';
@@ -104,7 +104,8 @@ function onMouseUp(ev) {
 }
 
 function onClick(ev) {
-  if (ev.button !== 0 || !state.gameStarted || state.gameOver || state.paused) return;
+  if (ev.button !== 0 || !state.gameStarted || state.gameOver) return;
+  if (state.paused) { import('./game.js').then(m => m.togglePause()); return; }
   if (state._skipNextClick) { state._skipNextClick = false; return; }
 
   const r = state.canvas.getBoundingClientRect();
@@ -140,16 +141,20 @@ function onClick(ev) {
   }
 
   if (state.buildMode) {
-    if (!canPlace(state.buildMode, tx, ty, f)) { setMsg('Cannot place here!', 90); return; }
-    placeBuilding(f, state.buildMode, tx, ty, state.buildReady);
-    if (state.buildReady) {
-      const q = state.hudBuildQueue[f];
-      const idx = q.findIndex(it => it.type === state.buildMode && it.ready);
-      if (idx >= 0) q.splice(idx, 1);
+    if (!canPlace(state.buildMode, tx, ty, f)) {
+      setMsg('Cannot place here!', 90); return;
+    }
+    const placed = placeBuilding(f, state.buildMode, tx, ty, true);
+    if (placed && state.buildReady) {
+      for (const q of [state.hudBuildQueue[f], state.hudDefQueue[f]]) {
+        const idx = q.findIndex(it => it.type === state.buildMode && it.ready);
+        if (idx >= 0) { q.splice(idx, 1); break; }
+      }
     }
     if (!ev.shiftKey) {
       state.buildMode = null;
       state.buildReady = false;
+      state.canvas.style.cursor = 'default';
       updateBuildPanel();
     }
     return;
@@ -188,7 +193,38 @@ function onClick(ev) {
 
 function onRightClick(ev) {
   ev.preventDefault();
-  if (!state.gameStarted || state.gameOver || state.paused) return;
+  if (!state.gameStarted || state.gameOver) return;
+
+  if (state.paused) {
+    const f = state.playerFaction;
+    const bq = state.hudBuildQueue[f];
+    const dq = state.hudDefQueue[f];
+    if (bq.length) {
+      const item = bq.shift();
+      state.credits[f] += BDEF[item.type].cost;
+      if (state.buildMode === item.type) { state.buildMode = null; state.buildReady = false; }
+      setMsg('Cancelled ' + BDEF[item.type].name + ' — $' + BDEF[item.type].cost + ' refunded', 180);
+      updateBuildPanel();
+    } else if (dq.length) {
+      const item = dq.shift();
+      state.credits[f] += BDEF[item.type].cost;
+      if (state.buildMode === item.type) { state.buildMode = null; state.buildReady = false; }
+      setMsg('Cancelled ' + BDEF[item.type].name + ' — $' + BDEF[item.type].cost + ' refunded', 180);
+      updateBuildPanel();
+    } else {
+      const trainB = state.entities.find(e => !e.dead && e.isBuilding && e.faction === f && e.trainQ.length);
+      if (trainB) {
+        const item = trainB.trainQ.shift();
+        state.credits[f] += UDEF[item.type].cost;
+        setMsg('Cancelled ' + UDEF[item.type].name + ' — $' + UDEF[item.type].cost + ' refunded', 180);
+        updateBuildPanel();
+      } else {
+        setMsg('Nothing to cancel', 60);
+      }
+    }
+    return;
+  }
+
   if (state.repairMode || state.sellMode) {
     clearModes();
     updateBuildPanel();
@@ -217,7 +253,7 @@ function onRightClick(ev) {
     .map(id => state.entities.find(e => e.id === id))
     .filter(u => u && u.isUnit && u.faction === f && !u.dead);
 
-  // Buildings-only selection + right-click ground → set waypoints
+  // Buildings-only selection + right-click ground → set waypoints; no selection → pause
   if (!myUnits.length && !target) {
     const selBuildings = state.selected
       .map(id => getEnt(id))
@@ -230,6 +266,8 @@ function onRightClick(ev) {
       state.moveIndicators.push({ wx, wy, t: 60 });
       return;
     }
+    import('./game.js').then(m => m.togglePause());
+    return;
   }
 
   if (!myUnits.length) return;
@@ -296,6 +334,20 @@ function onKey(ev) {
       const u = state.entities.find(e => e.id === id);
       if (u?.isUnit && u.faction === state.playerFaction) { u.state = 'idle'; u.path = []; u.target = null; }
     });
+  }
+  if (ev.key === 'f' || ev.key === 'F') {
+    const mcv = state.entities.find(e => !e.dead && e.isUnit && e.type === 'mcv' &&
+      e.faction === state.playerFaction && state.selected.includes(e.id));
+    if (mcv) {
+      const b = deployMcvInPlace(mcv);
+      if (b) {
+        state.selected = [b.id];
+        setMsg('MCV deployed — Command Center established', 180);
+        updateBuildPanel();
+      } else {
+        setMsg('No space to deploy — move MCV to open ground', 150);
+      }
+    }
   }
   if (ev.key === 'b' || ev.key === 'B') switchTab('build');
   if (ev.key === 't' || ev.key === 'T') switchTab('train');

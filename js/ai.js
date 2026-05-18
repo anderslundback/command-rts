@@ -32,6 +32,7 @@ export function makeAI(f) {
           !has('refinery') && has('power') && cr >= 500 && ['refinery', cmd.x, cmd.y + 4],
           !has('barracks') && has('refinery') && cr >= 400 && ['barracks', cmd.x + 4, cmd.y + 3],
           !has('factory')  && has('barracks') && cr >= 700 && ['factory',  cmd.x - 4, cmd.y],
+          !has('depot')    && has('factory')  && cr >= 600 && ['depot',    cmd.x - 4, cmd.y + 3],
           has('barracks')  && this.myBuildings('turret').length < 5 && cr >= 350 &&
             ['turret', cmd.x + ((Math.random() * 10 - 5) | 0), cmd.y + ((Math.random() * 10 - 5) | 0)],
         ].find(Boolean);

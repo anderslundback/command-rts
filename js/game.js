@@ -10,9 +10,10 @@ import { updateBuilding, updateSidebarQueues } from './buildings.js';
 import { updateParticles } from './particles.js';
 import { makeAI } from './ai.js';
 import { render, renderMinimap } from './renderer.js';
-import { updateHUD, setMsg } from './hud.js';
+import { setMsg } from './hud.js';
 import { speak } from './audio.js';
 import { clampCam } from './input.js';
+import { syncFromGameState } from './store.js';
 
 export function startGame(pf) {
   state.playerFaction = pf;
@@ -26,6 +27,7 @@ export function startGame(pf) {
   state.repairMode = false;
   state.sellMode = false;
   state.hudBuildQueue = [[], [], []];
+  state.hudDefQueue = [[], [], []];
   state.buildReady = false;
   state.primaryBuilding = {};
   state.factionEliminated = [false, false, false];
@@ -43,7 +45,6 @@ export function startGame(pf) {
 
   genMap();
 
-  // Record ore positions for regen
   for (let ty = 0; ty < 60; ty++)
     for (let tx = 0; tx < 80; tx++)
       if (state.map[ty][tx] === T.ORE) state.oreHistory.add(ty * 80 + tx);
@@ -70,26 +71,23 @@ export function startGame(pf) {
   state.cam.y = py * TS - state.canvas.height / 2;
   clampCam();
 
-  document.getElementById('overlay').style.display = 'none';
-  document.getElementById('gameover').style.display = 'none';
+  syncFromGameState();
 
   if (state.frameId) cancelAnimationFrame(state.frameId);
   loop();
 }
 
 export function showMenu() {
-  document.getElementById('gameover').style.display = 'none';
-  document.getElementById('pause').style.display = 'none';
-  document.getElementById('overlay').style.display = 'flex';
   state.gameStarted = false;
   state.gameOver = false;
   state.paused = false;
+  syncFromGameState();
 }
 
 export function togglePause() {
   if (!state.gameStarted || state.gameOver) return;
   state.paused = !state.paused;
-  document.getElementById('pause').style.display = state.paused ? 'flex' : 'none';
+  syncFromGameState();
 }
 
 function loop() {
@@ -98,10 +96,6 @@ function loop() {
     state.fpsSmooth = state.fpsSmooth * 0.9 + (1000 / (now - state.fpsLastTime)) * 0.1;
   }
   state.fpsLastTime = now;
-  if (state.tick % 60 === 0) {
-    const el = document.getElementById('hud-fps');
-    if (el) el.textContent = Math.round(state.fpsSmooth) + ' FPS';
-  }
 
   state.tick++;
 
@@ -143,7 +137,7 @@ function loop() {
       while (i--) { state.moveIndicators[i].t--; if (state.moveIndicators[i].t <= 0) state.moveIndicators.splice(i, 1); }
     }
 
-    updateHUD();
+    syncFromGameState();
   }
 
   render();
@@ -160,13 +154,4 @@ function checkVictory() {
   if (aliveCount > 1) return;
 
   state.gameOver = true;
-  const winner = alive.indexOf(true);
-  const isWin = winner === state.playerFaction;
-  const go = document.getElementById('gameover');
-  const title = document.getElementById('go-title');
-  title.textContent = isWin ? 'VICTORY' : 'DEFEAT';
-  title.style.color = isWin ? '#4d8' : '#f64';
-  document.getElementById('go-sub').textContent =
-    winner >= 0 ? FDATA[winner].name + ' wins' : 'All factions destroyed';
-  go.style.display = 'flex';
 }

@@ -29,20 +29,23 @@ export const ARMOR_MULT = Object.freeze({
 });
 
 export const BDEF = Object.freeze({
-  command:  { name: 'Command Ctr', w: 3, h: 3, cost: 0,   power: -2, hp: 1200, btime: 0,  prereq: null,       armor: 'building', weapon: null,  desc: 'Main base' },
-  power:    { name: 'Power Plant', w: 2, h: 2, cost: 300,  power:  5, hp: 350,  btime: 8,  prereq: 'command',  armor: 'building', weapon: null,  desc: '+5 power' },
-  refinery: { name: 'Refinery',    w: 3, h: 2, cost: 500,  power: -1, hp: 600,  btime: 12, prereq: 'command',  armor: 'building', weapon: null,  desc: 'Ore · spawns Harvester' },
-  barracks: { name: 'Barracks',    w: 2, h: 2, cost: 400,  power: -1, hp: 500,  btime: 10, prereq: 'power',    armor: 'building', weapon: null,  desc: 'Trains infantry' },
-  factory:  { name: 'War Factory', w: 3, h: 2, cost: 700,  power: -2, hp: 700,  btime: 16, prereq: 'power',    armor: 'building', weapon: null,  desc: 'Trains vehicles' },
-  turret:   { name: 'Turret',      w: 1, h: 1, cost: 350,  power: -1, hp: 280,  btime: 8,  prereq: 'barracks', armor: 'building', weapon: 'gun', desc: 'Defense gun', range: 6, dmg: 18, aspd: 55 },
+  command:  { name: 'Command Ctr',   w: 3, h: 3, cost: 0,    power: -2, hp: 1200, btime: 0,  prereq: null,       armor: 'building', weapon: null,  desc: 'Main base' },
+  power:    { name: 'Power Plant',   w: 2, h: 2, cost: 300,  power:  5, hp: 350,  btime: 8,  prereq: 'command',  armor: 'building', weapon: null,  desc: '+5 power' },
+  refinery: { name: 'Refinery',      w: 3, h: 2, cost: 500,  power: -1, hp: 600,  btime: 12, prereq: 'command',  armor: 'building', weapon: null,  desc: 'Ore · spawns Harvester' },
+  barracks: { name: 'Barracks',      w: 2, h: 2, cost: 400,  power: -1, hp: 500,  btime: 10, prereq: 'power',    armor: 'building', weapon: null,  desc: 'Trains infantry' },
+  factory:  { name: 'War Factory',   w: 3, h: 2, cost: 700,  power: -2, hp: 700,  btime: 16, prereq: 'power',    armor: 'building', weapon: null,  desc: 'Trains vehicles' },
+  depot:    { name: 'Service Depot', w: 3, h: 2, cost: 600,  power: -1, hp: 450,  btime: 14, prereq: 'factory',  armor: 'building', weapon: null,  desc: 'Repairs vehicles · unlocks MCV' },
+  turret:   { name: 'Turret',        w: 1, h: 1, cost: 350,  power: -1, hp: 280,  btime: 8,  prereq: 'barracks', armor: 'building', weapon: 'gun', desc: 'Defense gun', range: 6, dmg: 18, aspd: 55 },
 });
 
 export const UDEF = Object.freeze({
-  harvester: { name: 'Harvester', cost: 800, hp: 200, speed: 1.4, dmg: 0,  range: 0, aspd: 0,  ttime: 14, desc: 'Collects ore',  armor: 'light',    weapon: null },
-  rifleman:  { name: 'Rifleman',  cost: 200, hp: 80,  speed: 2.2, dmg: 14, range: 5, aspd: 50, ttime: 6,  desc: 'Anti-infantry', armor: 'infantry', weapon: 'small_arms' },
-  rocketeer: { name: 'Rocketeer', cost: 350, hp: 60,  speed: 1.9, dmg: 28, range: 6, aspd: 90, ttime: 9,  desc: 'Anti-armor',   armor: 'infantry', weapon: 'rockets' },
-  tank:      { name: 'Tank',      cost: 650, hp: 320, speed: 1.6, dmg: 35, range: 5, aspd: 85, ttime: 15, desc: 'Heavy armor',  armor: 'heavy',    weapon: 'cannon' },
+  harvester: { name: 'Harvester', cost: 800,  hp: 200, speed: 1.4, dmg: 0,  range: 0, aspd: 0,  ttime: 14, desc: 'Collects ore',            armor: 'light',    weapon: null },
+  rifleman:  { name: 'Rifleman',  cost: 200,  hp: 80,  speed: 2.2, dmg: 14, range: 5, aspd: 50, ttime: 6,  desc: 'Anti-infantry',            armor: 'infantry', weapon: 'small_arms' },
+  rocketeer: { name: 'Rocketeer', cost: 350,  hp: 60,  speed: 1.9, dmg: 28, range: 6, aspd: 90, ttime: 9,  desc: 'Anti-armor',               armor: 'infantry', weapon: 'rockets' },
+  tank:      { name: 'Tank',      cost: 650,  hp: 320, speed: 1.6, dmg: 35, range: 5, aspd: 85, ttime: 15, desc: 'Heavy armor',              armor: 'heavy',    weapon: 'cannon' },
+  mcv:       { name: 'MCV',       cost: 1200, hp: 300, speed: 1.1, dmg: 0,  range: 0, aspd: 0,  ttime: 25, desc: 'Deploys as Command Center', armor: 'heavy',    weapon: null },
 });
 
-export const BUILD_TYPES = ['power', 'refinery', 'barracks', 'factory', 'turret'];
-export const TRAIN_FROM  = Object.freeze({ barracks: ['rifleman', 'rocketeer'], factory: ['harvester', 'tank'] });
+export const BUILD_TYPES   = ['power', 'refinery', 'barracks', 'factory', 'depot'];
+export const DEFENSE_TYPES = ['turret'];
+export const TRAIN_FROM    = Object.freeze({ barracks: ['rifleman', 'rocketeer'], factory: ['harvester', 'tank', 'mcv'] });

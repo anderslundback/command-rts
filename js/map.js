@@ -4,10 +4,10 @@ import { state } from './state.js';
 export function genMap() {
   state.map = Array.from({ length: MH }, () => new Int8Array(MW));
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 8; i++) {
     const cx = 5 + (Math.random() * (MW - 10)) | 0;
     const cy = 5 + (Math.random() * (MH - 10)) | 0;
-    const r = 2 + (Math.random() * 4) | 0;
+    const r = 1 + (Math.random() * 3) | 0;
     for (let dy = -r; dy <= r; dy++)
       for (let dx = -r; dx <= r; dx++)
         if (dx * dx + dy * dy <= r * r + r) setTile(cx + dx, cy + dy, T.WATER);
@@ -20,7 +20,13 @@ export function genMap() {
       setTile(cx + ((Math.random() * 6 - 3) | 0), cy + ((Math.random() * 6 - 3) | 0), T.ROCK);
   }
 
-  const oreSeeds = [[20,12],[60,12],[10,30],[40,20],[70,28],[25,48],[55,48],[40,38],[38,8]];
+  // 3 private patches per player (symmetric) + 3 neutral patches
+  const oreSeeds = [
+    [18,13],[10,23],[21,24],   // P0 (7,7) private
+    [60,13],[68,23],[57,24],   // P1 (69,7) private — left-right mirror of P0
+    [28,40],[50,40],[39,35],   // P2 (39,48) private — symmetric about x=39
+    [25,28],[53,28],[39,16],   // neutral contested
+  ];
   for (const [ox, oy] of oreSeeds)
     for (let dy = -4; dy <= 4; dy++)
       for (let dx = -4; dx <= 4; dx++)
@@ -51,11 +57,12 @@ export function startPositions() {
   return [[7, 7], [MW - 11, 7], [(MW / 2 | 0) - 1, MH - 12]];
 }
 
-export function nearestOre(x, y) {
+export function nearestOre(x, y, exclude) {
   let best = null, bd = Infinity;
   for (let ty = 0; ty < MH; ty++)
     for (let tx = 0; tx < MW; tx++) {
       if (state.map[ty][tx] !== T.ORE) continue;
+      if (exclude?.has(ty * MW + tx)) continue;
       const d = Math.abs(tx - x) + Math.abs(ty - y);
       if (d < bd) { bd = d; best = { x: tx, y: ty }; }
     }

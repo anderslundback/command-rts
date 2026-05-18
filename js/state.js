@@ -40,6 +40,8 @@ export const state = {
   minimapDirty: true,
 
   hudBuildQueue: [[], [], []],
+  hudDefQueue:   [[], [], []],
+  deployMcvId: null,
   repairMode: false,
   sellMode: false,
   primaryBuilding: {},

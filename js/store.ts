@@ -1,0 +1,193 @@
+import { createStore } from 'zustand/vanilla';
+import { useStore } from 'zustand';
+// @ts-ignore
+import { state as _s } from './state.js';
+const s: any = _s;
+// @ts-ignore
+import { FDATA } from './constants.js';
+
+// ── Shared sub-types ────────────────────────────────────────────────────────
+
+export interface QueueItemUI {
+  type: string;
+  t: number;
+  total: number;
+  paid: number;
+  ready: boolean;
+}
+
+export interface TrainItemUI {
+  type: string;
+  t: number;
+  total: number;
+}
+
+export interface TrainQueueUI {
+  bldgId: number;
+  bldgType: string;
+  items: TrainItemUI[];
+}
+
+export interface EntUI {
+  id: number;
+  type: string;
+  isBuilding: boolean;
+  hp: number;
+  maxHp: number;
+  faction: number;
+  unitState: string;
+  ore: number;
+  maxOre: number;
+  dmg: number;
+  range: number;
+  weaponType: string | null;
+  bprog: number;
+  done: boolean;
+  trainQ: TrainItemUI[];
+  waypoint: { tx: number; ty: number } | null;
+  repairing: boolean;
+}
+
+// ── Store shape ──────────────────────────────────────────────────────────────
+
+export interface UIState {
+  phase: 'menu' | 'playing' | 'paused' | 'gameover';
+  playerFaction: number;
+  winnerFaction: number;
+  winnerName: string;
+  credits: number;
+  powerUsed: number;
+  powerGen: number;
+  statusMsg: string;
+  fps: number;
+  activeTab: 'build' | 'train';
+  buildMode: string | null;
+  buildReady: boolean;
+  repairMode: boolean;
+  sellMode: boolean;
+  buildQueue: QueueItemUI[];
+  defQueue: QueueItemUI[];
+  doneTypes: string[];
+  sel: EntUI[];
+  trainQueues: TrainQueueUI[];
+  primaryBuilding: Record<string, number>;
+}
+
+// ── Initial state ────────────────────────────────────────────────────────────
+
+const initialState: UIState = {
+  phase: 'menu',
+  playerFaction: 0,
+  winnerFaction: -1,
+  winnerName: '',
+  credits: 0,
+  powerUsed: 0,
+  powerGen: 0,
+  statusMsg: '',
+  fps: 60,
+  activeTab: 'build',
+  buildMode: null,
+  buildReady: false,
+  repairMode: false,
+  sellMode: false,
+  buildQueue: [],
+  defQueue: [],
+  doneTypes: [],
+  sel: [],
+  trainQueues: [],
+  primaryBuilding: {},
+};
+
+// ── Zustand vanilla store ────────────────────────────────────────────────────
+
+export const uiStore = createStore<UIState>()(() => initialState);
+
+// Convenience hook for React components
+export function useUIStore<T>(selector: (state: UIState) => T): T {
+  return useStore(uiStore, selector);
+}
+
+// ── Sync function (called each game tick from game.js) ───────────────────────
+
+export function syncFromGameState(): void {
+  const f: number = s.playerFaction;
+  const done: any[] = s.entities.filter(
+    (e: any) => !e.dead && e.isBuilding && e.faction === f && e.done
+  );
+
+  // Derive phase
+  let phase: UIState['phase'] = 'menu';
+  if (s.gameStarted && !s.gameOver) {
+    phase = s.paused ? 'paused' : 'playing';
+  } else if (s.gameOver) {
+    phase = 'gameover';
+  }
+
+  // Derive winner
+  let winnerFaction = -1;
+  let winnerName = '';
+  if (s.gameOver) {
+    const alive: [boolean, boolean, boolean] = [false, false, false];
+    for (const e of s.entities) {
+      if (!e.dead && e.isBuilding) alive[e.faction as 0 | 1 | 2] = true;
+    }
+    winnerFaction = alive.indexOf(true);
+    winnerName = winnerFaction >= 0 ? FDATA[winnerFaction].name : 'Draw';
+  }
+
+  // Serialize selected entities
+  const sel: EntUI[] = (s.selected as number[])
+    .map((id: number) => (s.entities as any[]).find((e: any) => e.id === id))
+    .filter(Boolean)
+    .map((e: any): EntUI => ({
+      id: e.id,
+      type: e.type,
+      isBuilding: !!e.isBuilding,
+      hp: e.hp,
+      maxHp: e.maxHp,
+      faction: e.faction,
+      unitState: e.state,
+      ore: e.ore ?? 0,
+      maxOre: e.maxOre ?? 0,
+      dmg: e.dmg ?? 0,
+      range: e.range ?? 0,
+      weaponType: e.weaponType ?? null,
+      bprog: e.bprog ?? 0,
+      done: !!e.done,
+      trainQ: Array.isArray(e.trainQ) ? e.trainQ.map((it: any) => ({ ...it })) : [],
+      waypoint: e.waypoint ? { ...e.waypoint } : null,
+      repairing: !!e.repairing,
+    }));
+
+  // Serialize training queues across all player buildings
+  const trainQueues: TrainQueueUI[] = done
+    .filter((b: any) => b.trainQ && b.trainQ.length > 0)
+    .map((b: any): TrainQueueUI => ({
+      bldgId: b.id,
+      bldgType: b.type,
+      items: b.trainQ.map((it: any) => ({ ...it })),
+    }));
+
+  uiStore.setState({
+    phase,
+    playerFaction: f,
+    winnerFaction,
+    winnerName,
+    credits: Math.floor(s.credits[f]),
+    powerUsed: s.powerUsed[f],
+    powerGen: s.powerGen[f],
+    statusMsg: s.statusTimer > 0 ? s.statusMsg : '',
+    fps: Math.round(s.fpsSmooth),
+    activeTab: s.activeTab as 'build' | 'train',
+    buildMode: s.buildMode,
+    buildReady: s.buildReady,
+    repairMode: s.repairMode,
+    sellMode: s.sellMode,
+    buildQueue: (s.hudBuildQueue[f] as any[]).map((it: any) => ({ ...it })),
+    defQueue: (s.hudDefQueue[f] as any[]).map((it: any) => ({ ...it })),
+    doneTypes: done.map((b: any) => b.type as string),
+    sel,
+    trainQueues,
+    primaryBuilding: { ...s.primaryBuilding },
+  });
+}

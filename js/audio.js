@@ -103,3 +103,28 @@ export function speak(text) {
   u.volume = 0.8; u.rate = 1.1; u.pitch = 0.9;
   synth.speak(u);
 }
+
+const UNIT_LINES = {
+  rifleman:  'Rifleman reporting',
+  rocketeer: 'Rocketeer armed and ready',
+  harvester: 'Harvester online',
+  tank:      'Tank ready for combat',
+  mcv:       'MCV ready for deployment',
+};
+
+const BUILD_LINES = {
+  power:    'Power plant online',
+  refinery: 'Refinery operational',
+  barracks: 'Barracks complete',
+  factory:  'War factory online',
+  depot:    'Service depot operational',
+  turret:   'Defense turret active',
+};
+
+export function speakUnit(type) {
+  speak(UNIT_LINES[type] ?? 'Unit ready');
+}
+
+export function speakBuilding(type) {
+  speak(BUILD_LINES[type] ?? 'Construction complete');
+}

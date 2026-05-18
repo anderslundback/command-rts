@@ -63,11 +63,11 @@ function renderMoveIndicators(ctx) {
   ctx.save();
   ctx.translate(-state.cam.x, -state.cam.y);
   for (const m of state.moveIndicators) {
-    const alpha = m.t / 30;
+    const alpha = Math.min(1, m.t / 30);
     ctx.strokeStyle = `rgba(100,255,150,${alpha * 0.8})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(m.wx, m.wy, 6 * (1 - alpha) + 2, 0, Math.PI * 2);
+    ctx.arc(m.wx, m.wy, Math.max(0, 6 * (1 - alpha) + 2), 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(m.wx, m.wy, 2, 0, Math.PI * 2);
@@ -79,7 +79,7 @@ function renderMoveIndicators(ctx) {
 
 function renderBuildings(ctx, VW, VH) {
   const { cam, tick, selected } = state;
-  const LABELS = { command: 'CMD', power: 'PWR', refinery: 'ORE', barracks: 'BRK', factory: 'FAC', turret: 'TRT' };
+  const LABELS = { command: 'CMD', power: 'PWR', refinery: 'ORE', barracks: 'BRK', factory: 'FAC', depot: 'DEP', turret: 'TRT' };
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
   for (const e of state.entities) {
@@ -188,6 +188,14 @@ function renderUnits(ctx, VW, VH) {
       ctx.strokeStyle = fd.color; ctx.globalAlpha = 0.25; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(e.px+7, e.py+7); ctx.lineTo(e.px+TS-7, e.py+TS-7); ctx.stroke();
       ctx.globalAlpha = 1;
+    } else if (e.type === 'mcv') {
+      const bc = flash ? `rgb(255,${(1-flash)*80|0},${(1-flash)*80|0})` : fd.color;
+      ctx.fillStyle = fd.dark; ctx.fillRect(e.px+2, e.py+4, TS-4, TS-8);
+      ctx.fillStyle = bc; ctx.fillRect(e.px+5, e.py+7, TS-10, TS-14);
+      // Satellite dish antenna
+      ctx.strokeStyle = bc; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx, cy-3); ctx.lineTo(cx+5, cy-8); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx+5, cy-9, 4, Math.PI*0.1, Math.PI*1.0); ctx.stroke();
     } else if (e.type === 'rocketeer') {
       const sc = flash ? `rgb(255,${(1-flash)*60|0},${(1-flash)*60|0})` : fd.color;
       ctx.fillStyle = fd.dark; ctx.beginPath(); ctx.arc(cx, cy, r+1, 0, Math.PI*2); ctx.fill();
@@ -240,6 +248,7 @@ function renderDragBox(ctx) {
 }
 
 export function renderMinimap() {
+  if (!state.radar || !state.radarCtx) return;
   if (!state.minimapDirty && state.tick % 4 !== 0) return;
   state.minimapDirty = false;
   const mmx = state.radarCtx;
