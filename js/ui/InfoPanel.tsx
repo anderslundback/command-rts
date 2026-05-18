@@ -215,7 +215,8 @@ function EntityDetail({
 // ── Info panel ────────────────────────────────────────────────────────────────
 
 export function InfoPanel(): React.ReactElement {
-  const { sel, playerFaction } = useUIStore(s => ({ sel: s.sel, playerFaction: s.playerFaction }));
+  const sel = useUIStore(s => s.sel);
+  const playerFaction = useUIStore(s => s.playerFaction);
 
   return (
     <div

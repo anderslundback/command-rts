@@ -4,15 +4,12 @@ import { useUIStore } from '../store';
 import { FDATA } from '../constants.js';
 
 export function HUD(): React.ReactElement {
-  const { playerFaction, credits, powerUsed, powerGen, statusMsg, fps } =
-    useUIStore(s => ({
-      playerFaction: s.playerFaction,
-      credits: s.credits,
-      powerUsed: s.powerUsed,
-      powerGen: s.powerGen,
-      statusMsg: s.statusMsg,
-      fps: s.fps,
-    }));
+  const playerFaction = useUIStore(s => s.playerFaction);
+  const credits = useUIStore(s => s.credits);
+  const powerUsed = useUIStore(s => s.powerUsed);
+  const powerGen = useUIStore(s => s.powerGen);
+  const statusMsg = useUIStore(s => s.statusMsg);
+  const fps = useUIStore(s => s.fps);
 
   const fd = FDATA[playerFaction] as { name: string; color: string };
   const powerOk = powerGen >= powerUsed;

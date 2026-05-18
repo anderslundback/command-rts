@@ -20,16 +20,9 @@ export function initInput() {
   canvas.addEventListener('wheel', ev => { state.cam.x += ev.deltaX; state.cam.y += ev.deltaY; clampCam(); }, { passive: true });
   window.addEventListener('keydown', onKey);
 
-  document.getElementById('radar').addEventListener('click', onRadarClick);
-  document.querySelectorAll('.faction-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      import('./game.js').then(m => m.startGame(+btn.dataset.faction));
-    });
-  });
-  document.getElementById('go-btn').addEventListener('click', () => {
-    import('./game.js').then(m => m.showMenu());
-  });
 }
+
+export { onRadarClick };
 
 function screenToWorld(sx, sy) {
   return { wx: sx + state.cam.x, wy: sy + state.cam.y };

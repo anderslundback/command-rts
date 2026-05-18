@@ -287,17 +287,14 @@ function TrainRow({
 // ── Build tab ────────────────────────────────────────────────────────────────
 
 function BuildTab(): React.ReactElement {
-  const { repairMode, sellMode, buildMode, buildReady, buildQueue, defQueue, doneTypes, credits } =
-    useUIStore(s => ({
-      repairMode: s.repairMode,
-      sellMode: s.sellMode,
-      buildMode: s.buildMode,
-      buildReady: s.buildReady,
-      buildQueue: s.buildQueue,
-      defQueue: s.defQueue,
-      doneTypes: s.doneTypes,
-      credits: s.credits,
-    }));
+  const repairMode = useUIStore(s => s.repairMode);
+  const sellMode = useUIStore(s => s.sellMode);
+  const buildMode = useUIStore(s => s.buildMode);
+  const buildReady = useUIStore(s => s.buildReady);
+  const buildQueue = useUIStore(s => s.buildQueue);
+  const defQueue = useUIStore(s => s.defQueue);
+  const doneTypes = useUIStore(s => s.doneTypes);
+  const credits = useUIStore(s => s.credits);
 
   // Ghost placement mode — just show cancel
   if (buildMode && buildReady) {
@@ -479,12 +476,10 @@ function BuildTab(): React.ReactElement {
 // ── Train tab ────────────────────────────────────────────────────────────────
 
 function TrainTab(): React.ReactElement {
-  const { trainQueues, doneTypes, credits, playerFaction } = useUIStore(s => ({
-    trainQueues: s.trainQueues,
-    doneTypes: s.doneTypes,
-    credits: s.credits,
-    playerFaction: s.playerFaction,
-  }));
+  const trainQueues = useUIStore(s => s.trainQueues);
+  const doneTypes = useUIStore(s => s.doneTypes);
+  const credits = useUIStore(s => s.credits);
+  const playerFaction = useUIStore(s => s.playerFaction);
 
   const fb = FBONUSES[playerFaction];
 

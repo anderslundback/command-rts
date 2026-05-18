@@ -4,22 +4,26 @@ import { InfoPanel } from './InfoPanel';
 import { BuildPanel } from './BuildPanel';
 // @ts-ignore
 import * as _S from '../state.js';
+// @ts-ignore
+import { onRadarClick } from '../input.js';
 const state: any = (_S as any).state;
 
 export function Sidebar(): React.ReactElement {
   const radarRef = useRef<HTMLCanvasElement>(null);
-  const { powerUsed, powerGen, activeTab } = useUIStore(s => ({
-    powerUsed: s.powerUsed,
-    powerGen: s.powerGen,
-    activeTab: s.activeTab,
-  }));
+  const powerUsed = useUIStore(s => s.powerUsed);
+  const powerGen = useUIStore(s => s.powerGen);
+  const activeTab = useUIStore(s => s.activeTab);
 
   // Wire the radar canvas into the game state so renderer can draw to it
   useEffect(() => {
     if (radarRef.current) {
       (state as any).radar = radarRef.current;
       (state as any).radarCtx = radarRef.current.getContext('2d');
+      radarRef.current.addEventListener('click', onRadarClick);
     }
+    return () => {
+      if (radarRef.current) radarRef.current.removeEventListener('click', onRadarClick);
+    };
   }, []);
 
   const powerOk = powerGen >= powerUsed;

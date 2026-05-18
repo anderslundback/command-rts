@@ -46,12 +46,10 @@ function FactionButton({
 }
 
 export function Menu(): React.ReactElement {
-  const { phase, winnerFaction, winnerName, playerFaction } = useUIStore(s => ({
-    phase: s.phase,
-    winnerFaction: s.winnerFaction,
-    winnerName: s.winnerName,
-    playerFaction: s.playerFaction,
-  }));
+  const phase = useUIStore(s => s.phase);
+  const winnerFaction = useUIStore(s => s.winnerFaction);
+  const winnerName = useUIStore(s => s.winnerName);
+  const playerFaction = useUIStore(s => s.playerFaction);
 
   const handleFactionSelect = (i: number) => {
     // @ts-ignore
