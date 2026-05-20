@@ -108,11 +108,19 @@ export function updateBuilding(b) {
   }
 }
 
-// Called once per game tick: advances both sidebar construction queues independently
+// Called once per game tick: advances both sidebar construction queues independently.
+// Host advances all factions' queues; skirmish/client only advances the local player's.
 export function updateSidebarQueues() {
-  const f = state.playerFaction;
-  advanceQueue(state.hudBuildQueue[f], f);
-  advanceQueue(state.hudDefQueue[f], f);
+  if (state.net?.role === 'host') {
+    for (let f = 0; f < 3; f++) {
+      advanceQueue(state.hudBuildQueue[f], f);
+      advanceQueue(state.hudDefQueue[f], f);
+    }
+  } else {
+    const f = state.playerFaction;
+    advanceQueue(state.hudBuildQueue[f], f);
+    advanceQueue(state.hudDefQueue[f], f);
+  }
 }
 
 function advanceQueue(q, f) {

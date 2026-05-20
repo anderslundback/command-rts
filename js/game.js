@@ -21,6 +21,7 @@ import { net, registerGameCallbacks } from './net/netClient.js';
 // ── Skirmish (single-player vs AI) ───────────────────────────────────────────
 
 export function startGame(pf) {
+  if (state.net?.snapTimer) clearInterval(state.net.snapTimer);
   state.net = null;
   _resetGameState(pf, [1000, 2000, 2000]);
 
@@ -56,13 +57,19 @@ export function startNetGame(mapSeed, myFaction, role, aiSlots) {
     initFog();
     updateFog();
     recordPower();
+    // Broadcast snapshots on a fixed timer independent of the render loop so
+    // background-tab RAF throttling doesn't starve clients of updates.
+    clearInterval(state.net.snapTimer);
+    state.net.snapTimer = setInterval(() => {
+      if (state.gameStarted && state.net?.role === 'host') broadcastSnapshot();
+    }, 100);
   } else {
     initFog();
   }
 
   _centerCamOn(myFaction);
   syncFromGameState();
-  if (state.frameId) cancelAnimationFrame(state.frameId);
+  if (state.frameId) { cancelAnimationFrame(state.frameId); clearTimeout(state.frameId); }
   loop();
 }
 
@@ -208,9 +215,16 @@ function applyCommand(cmd) {
       for (const id of cmd.ids) { const u = state.entById.get(id); if (u && ref) orderHarvest(u, ref); }
       break;
     }
-    case 'place':
-      placeBuilding(cmd.faction, cmd.btype, cmd.tx, cmd.ty, false);
+    case 'place': {
+      const placed = placeBuilding(cmd.faction, cmd.btype, cmd.tx, cmd.ty, true);
+      if (placed) {
+        for (const q of [state.hudBuildQueue[cmd.faction], state.hudDefQueue[cmd.faction]]) {
+          const idx = q.findIndex(it => it.type === cmd.btype && it.ready);
+          if (idx >= 0) { q.splice(idx, 1); break; }
+        }
+      }
       break;
+    }
     case 'queue_build': {
       const q = cmd.queueType === 'def' ? state.hudDefQueue[cmd.faction] : state.hudBuildQueue[cmd.faction];
       if (q) q.push({ type: cmd.btype, t: 0, total: (BDEF[cmd.btype]?.btime ?? 20) * 60, paid: 0, ready: false });
@@ -267,6 +281,7 @@ function applyCommand(cmd) {
 // ── Shared lifecycle ──────────────────────────────────────────────────────────
 
 export function showMenu() {
+  if (state.net?.snapTimer) clearInterval(state.net.snapTimer);
   state.net = null;
   state.gameStarted = false;
   state.gameOver = false;
@@ -291,8 +306,17 @@ function loop() {
 
   state.tick++;
 
-  // Client-only: render received state, no simulation
+  // Client-only: run local unit simulation for smooth movement between snapshots.
+  // Snapshots from the host override positions at ~10Hz; local sim fills the gaps.
   if (state.net?.role === 'client') {
+    if (state.gameStarted && !state.gameOver) {
+      for (const e of state.entities) {
+        if (e.dead) continue;
+        if (e.isUnit) updateUnit(e);
+      }
+      removeDeadEnts();
+      updateShells();
+    }
     updateFog();
     updateParticles();
     syncFromGameState();
@@ -347,13 +371,18 @@ function loop() {
       while (i--) { state.moveIndicators[i].t--; if (state.moveIndicators[i].t <= 0) state.moveIndicators.splice(i, 1); }
     }
     updateParticles();
-    if (state.net?.role === 'host' && state.tick % 6 === 0) broadcastSnapshot();
     syncFromGameState();
   }
 
   render();
   renderMinimap();
-  state.frameId = requestAnimationFrame(loop);
+  // Use setTimeout when host tab is hidden so background-tab RAF throttling
+  // (which drops to ~1fps) doesn't stall the simulation.
+  if (state.net?.role === 'host' && document.hidden) {
+    state.frameId = setTimeout(loop, 16);
+  } else {
+    state.frameId = requestAnimationFrame(loop);
+  }
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
