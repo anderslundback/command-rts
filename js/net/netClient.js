@@ -8,11 +8,13 @@ export function registerGameCallbacks(cb) { Object.assign(_cb, cb); }
 const handlers = new Map(); // type → Set<fn>
 let _ws = null;
 let _pingTimer = null;
+let _queue = []; // messages sent before connection opens
 
 export const net = {
   connect(url) {
     if (_ws) _ws.close();
     _ws = new WebSocket(url);
+    _queue = [];
 
     _ws.onmessage = e => {
       let msg;
@@ -23,6 +25,8 @@ export const net = {
 
     _ws.onopen = () => {
       uiStore.setState(st => ({ net: { ...st.net, connected: true } }));
+      for (const m of _queue) _ws.send(JSON.stringify(m));
+      _queue = [];
       _pingTimer = setInterval(() => {
         if (_ws?.readyState === 1) _ws.send(JSON.stringify({ type: 'ping', t: Date.now() }));
       }, 2000);
@@ -42,10 +46,12 @@ export const net = {
     clearInterval(_pingTimer);
     _ws?.close();
     _ws = null;
+    _queue = [];
   },
 
   send(msg) {
     if (_ws?.readyState === 1) _ws.send(JSON.stringify(msg));
+    else if (_ws?.readyState === 0) _queue.push(msg);
   },
 
   on(type, fn) {

@@ -166,6 +166,7 @@ export function Menu(): React.ReactElement {
   const handleCreateGame = () => {
     const name = playerName.trim() || 'Player 1';
     setNetError('');
+    import('../game.js').catch(console.error); // register net callbacks before game_start fires
     net.connect(__WS_URL__);
     net.on('room_created', (msg: any) => {
       uiStore.setState({
@@ -189,6 +190,7 @@ export function Menu(): React.ReactElement {
     if (code.length !== 4) { setNetError('Enter a 4-letter room code'); return; }
     const name = playerName.trim() || 'Player 2';
     setNetError('');
+    import('../game.js').catch(console.error); // register net callbacks before game_start fires
     net.connect(__WS_URL__);
     net.on('room_joined', (msg: any) => {
       uiStore.setState({
