@@ -1,4 +1,4 @@
-import { TS, HUD_H, SIDEBAR_W, FDATA, FBONUSES, T } from './constants.js';
+import { TS, HUD_H, SIDEBAR_W, FDATA, FBONUSES, T, BDEF, UDEF } from './constants.js';
 import { state } from './state.js';
 import { genMap, tickOreRegen, startPositions } from './map.js';
 import { resetEid, removeDeadEnts } from './entities.js';
@@ -9,6 +9,7 @@ import { updateUnit } from './units.js';
 import { updateBuilding, updateSidebarQueues } from './buildings.js';
 import { updateParticles } from './particles.js';
 import { updateShells } from './shells.js';
+import { initFog, updateFog } from './fog.js';
 import { makeAI } from './ai.js';
 import { render, renderMinimap } from './renderer.js';
 import { setMsg } from './hud.js';
@@ -34,7 +35,7 @@ export function startGame(pf) {
   state.primaryBuilding = {};
   state.factionEliminated = [false, false, false];
   state.gameOverDelay = 0;
-  state.gameStats = { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0 };
+  state.gameStats = { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0, powerHistory: [] };
   state.paused = false;
   state.credits   = [1000, 2000, 2000];
   state.powerUsed = [0, 0, 0];
@@ -69,6 +70,9 @@ export function startGame(pf) {
     for (let i = 0; i < 3; i++) spawnUnit(f, 'rifleman', sx + 7 + i, sy + i);
   }
   calcPower();
+  initFog();
+  updateFog();
+  recordPower();
 
   const [px, py] = starts[pf];
   state.cam.x = px * TS - state.canvas.width  / 2;
@@ -139,6 +143,8 @@ function loop() {
       updateSidebarQueues();
       for (let i = 0; i < 3; i++) state.AI[i]?.update();
       updateShells();
+      updateFog();
+      if (state.tick % 300 === 1) recordPower();
       tickOreRegen();
       if (state.statusTimer > 0) state.statusTimer--;
       let i = state.moveIndicators.length;
@@ -153,6 +159,17 @@ function loop() {
   state.frameId = requestAnimationFrame(loop);
 }
 
+function recordPower() {
+  const scores = [0, 0, 0];
+  for (const e of state.entities) {
+    if (e.dead) continue;
+    const hpRatio = e.hp / e.maxHp;
+    scores[e.faction] += hpRatio * ((e.isBuilding ? BDEF[e.type]?.cost : UDEF[e.type]?.cost) ?? 100);
+  }
+  for (let f = 0; f < 3; f++) scores[f] += state.credits[f] * 0.25;
+  state.gameStats.powerHistory.push({ tick: state.tick, scores: [...scores] });
+}
+
 function checkVictory() {
   const alive = [false, false, false];
   for (const e of state.entities)
@@ -164,5 +181,7 @@ function checkVictory() {
   state.gameOver = true;
   state.gameOverDelay = 210;
   state.gameStats.endTick = state.tick;
+  recordPower();
+  state.gameStats.powerHistory = [...state.gameStats.powerHistory]; // snapshot ref for React
   speak(alive[state.playerFaction] ? 'Mission accomplished. Victory!' : 'Mission failed.');
 }

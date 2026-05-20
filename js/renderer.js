@@ -7,6 +7,7 @@ export function render() {
   const VW = state.canvas.width, VH = state.canvas.height;
   ctx.clearRect(0, 0, VW, VH);
   renderTiles(ctx, VW, VH);
+  renderFog(ctx, VW, VH);
   renderBuildPreview(ctx);
   renderMoveIndicators(ctx);
   renderBuildings(ctx, VW, VH);
@@ -88,6 +89,10 @@ function renderBuildings(ctx, VW, VH) {
     if (!e.isBuilding) continue;
     const bx = e.x * TS, by = e.y * TS, bw = e.w * TS, bh = e.h * TS;
     if (bx + bw < cam.x || bx > cam.x + VW || by + bh < cam.y || by > cam.y + VH) continue;
+    if (e.faction !== state.playerFaction && state.fog?.visible) {
+      const mc = ((e.y + (e.h >> 1)) * MW + e.x + (e.w >> 1));
+      if (!state.fog.visible[mc]) continue;
+    }
 
     const fd = FDATA[e.faction];
     const isSel = selected.includes(e.id);
@@ -159,6 +164,9 @@ function renderUnits(ctx, VW, VH) {
     if (!e.isUnit) continue;
     const cx = e.px + TS/2, cy = e.py + TS/2, r = TS * 0.35;
     if (cx+r < cam.x || cx-r > cam.x+VW || cy+r < cam.y || cy-r > cam.y+VH) continue;
+    if (e.faction !== state.playerFaction && state.fog?.visible) {
+      if (!state.fog.visible[e.y * MW + e.x]) continue;
+    }
     const fd = FDATA[e.faction];
     const isSel = selected.includes(e.id);
     const flash = e.hitFlash / 8;
@@ -289,6 +297,34 @@ function renderDragBox(ctx) {
   ctx.restore();
 }
 
+function renderFog(ctx, VW, VH) {
+  if (!state.fog?.visible) return;
+  const { cam } = state;
+  const tsx = Math.max(0, (cam.x / TS) | 0);
+  const tsy = Math.max(0, (cam.y / TS) | 0);
+  const tex = Math.min(MW, tsx + (VW / TS | 0) + 2);
+  const tey = Math.min(MH, tsy + (VH / TS | 0) + 2);
+  ctx.save();
+  ctx.translate(-cam.x, -cam.y);
+  // Unexplored tiles: solid black
+  ctx.fillStyle = '#000';
+  for (let ty = tsy; ty < tey; ty++)
+    for (let tx = tsx; tx < tex; tx++)
+      if (!state.fog.explored[ty * MW + tx])
+        ctx.fillRect(tx * TS, ty * TS, TS, TS);
+  // Explored but not currently visible: semi-transparent veil
+  ctx.globalAlpha = 0.62;
+  ctx.fillStyle = '#000';
+  for (let ty = tsy; ty < tey; ty++)
+    for (let tx = tsx; tx < tex; tx++) {
+      const idx = ty * MW + tx;
+      if (state.fog.explored[idx] && !state.fog.visible[idx])
+        ctx.fillRect(tx * TS, ty * TS, TS, TS);
+    }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 function renderShells(ctx) {
   if (!state.shells.length) return;
   ctx.save();
@@ -390,13 +426,23 @@ export function renderMinimap() {
   mmx.fillRect(0, 0, mw, mh);
   for (let ty = 0; ty < MH; ty += 2)
     for (let tx = 0; tx < MW; tx += 2) {
+      const fogIdx = ty * MW + tx;
+      if (state.fog?.explored && !state.fog.explored[fogIdx]) continue; // unexplored = black
       const t = state.map[ty][tx];
       if (t === T.GRASS) continue;
+      const vis = !state.fog?.visible || state.fog.visible[fogIdx];
+      mmx.globalAlpha = vis ? 1 : 0.35;
       mmx.fillStyle = t === T.WATER ? '#0e2235' : t === T.ORE ? '#2a5a18' : '#2a2820';
       mmx.fillRect(tx*sx, ty*sy, sx*2+1, sy*2+1);
     }
+  mmx.globalAlpha = 1;
   for (const e of state.entities) {
     if (e.dead) continue;
+    if (e.faction !== pf && state.fog?.visible) {
+      const etx = e.isBuilding ? (e.x + (e.w >> 1)) : e.x;
+      const ety = e.isBuilding ? (e.y + (e.h >> 1)) : e.y;
+      if (!state.fog.visible[ety * MW + etx]) continue;
+    }
     mmx.fillStyle = FDATA[e.faction].color;
     if (e.isBuilding) mmx.fillRect(e.x*sx, e.y*sy, e.w*sx+1, e.h*sy+1);
     else mmx.fillRect(e.x*sx, e.y*sy, Math.max(2,sx), Math.max(2,sy));

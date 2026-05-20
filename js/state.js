@@ -52,5 +52,6 @@ export const state = {
   volume: 0.5,
   factionEliminated: [false, false, false],
   gameOverDelay: 0,
-  gameStats: { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0 },
+  gameStats: { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0, powerHistory: [] },
+  fog: { explored: null, visible: null },
 };

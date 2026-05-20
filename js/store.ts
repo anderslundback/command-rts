@@ -50,10 +50,16 @@ export interface EntUI {
 
 // ── Store shape ──────────────────────────────────────────────────────────────
 
+export interface PowerPoint {
+  tick: number;
+  scores: number[];
+}
+
 export interface GameStats {
   duration: number;
   enemiesKilled: number;
   unitsLost: number;
+  powerHistory: PowerPoint[];
 }
 
 export interface UIState {
@@ -87,7 +93,7 @@ const initialState: UIState = {
   playerFaction: 0,
   winnerFaction: -1,
   winnerName: '',
-  gameStats: { duration: 0, enemiesKilled: 0, unitsLost: 0 },
+  gameStats: { duration: 0, enemiesKilled: 0, unitsLost: 0, powerHistory: [] },
   credits: 0,
   powerUsed: 0,
   powerGen: 0,
@@ -188,6 +194,7 @@ export function syncFromGameState(): void {
       duration,
       enemiesKilled: s.gameStats?.enemiesKilled ?? 0,
       unitsLost: s.gameStats?.unitsLost ?? 0,
+      powerHistory: s.gameStats?.powerHistory ?? [],
     },
     credits: Math.floor(s.credits[f]),
     powerUsed: s.powerUsed[f],
