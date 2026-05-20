@@ -5,15 +5,19 @@ import { T } from './constants.js';
 import { getEnt } from './entities.js';
 import { astar, adjTile, adjToBuilding, distToEnt } from './pathfinding.js';
 import { nearestRefinery, hasPwr } from './resources.js';
-import { dealDmg, autoAttack } from './combat.js';
+import { dealDmg, dealSplash, autoAttack } from './combat.js';
 import { orderHarvest } from './orders.js';
 import { playShot, playCash } from './audio.js';
 
+const VEHICLE_TYPES = new Set(['tank', 'harvester', 'mcv', 'scout', 'aatrack', 'artillery', 'v2rocket', 'tomahawk']);
+
 export function updateUnit(u) {
+  if (u.armorType === 'air') { updateAirUnit(u); return; }
+
   if (u.hitFlash > 0) u.hitFlash--;
 
   // Depot auto-repair for vehicles
-  if ((u.type === 'tank' || u.type === 'harvester' || u.type === 'mcv') && u.hp < u.maxHp) {
+  if (VEHICLE_TYPES.has(u.type) && u.hp < u.maxHp) {
     if (state.tick % 3 === 0 && hasPwr(u.faction)) {
       const depot = state.entities.find(e => !e.dead && e.isBuilding && e.faction === u.faction &&
         e.type === 'depot' && e.done && adjToBuilding(u.x, u.y, e));
@@ -26,7 +30,7 @@ export function updateUnit(u) {
   }
 
   // Crush any enemy infantry sharing this tile (handles infantry walking into a vehicle)
-  if (u.type === 'tank' || u.type === 'harvester' || u.type === 'mcv') {
+  if (VEHICLE_TYPES.has(u.type)) {
     for (const e of state.entities) {
       if (!e.dead && e.isUnit && e !== u && e.x === u.x && e.y === u.y &&
           e.faction !== u.faction && e.armorType === 'infantry') {
@@ -58,7 +62,13 @@ export function updateUnit(u) {
         u.path = [];
         if (++u.atimer >= u.aspd) {
           u.atimer = 0;
-          dealDmg(tgt, u.dmg, u);
+          if (u.splash) {
+            const tx = (tgt.isBuilding ? tgt.x + tgt.w / 2 : tgt.x) * TS;
+            const ty = (tgt.isBuilding ? tgt.y + tgt.h / 2 : tgt.y) * TS;
+            dealSplash(tx, ty, u.dmg, u.splash * TS, u);
+          } else {
+            dealDmg(tgt, u.dmg, u);
+          }
           const { cam, canvas } = state;
           if (u.px >= cam.x - 200 && u.px <= cam.x + canvas.width + 200 &&
               u.py >= cam.y - 200 && u.py <= cam.y + canvas.height + 200) {
@@ -128,6 +138,60 @@ export function updateUnit(u) {
   }
 }
 
+// ── Air unit logic ────────────────────────────────────────────────────────────
+
+function updateAirUnit(u) {
+  if (u.hitFlash > 0) u.hitFlash--;
+  switch (u.state) {
+    case 'idle':
+      autoAttack(u);
+      break;
+    case 'move':
+      if (u.destPx !== undefined) moveAirToward(u, u.destPx, u.destPy);
+      else u.state = 'idle';
+      break;
+    case 'attack': {
+      const tgt = getEnt(u.target);
+      if (!tgt || tgt.dead) { u.state = 'idle'; u.target = null; break; }
+      const dist = distToEnt(u, tgt);
+      const tx = (tgt.isBuilding ? tgt.x + tgt.w / 2 : tgt.x) * TS;
+      const ty = (tgt.isBuilding ? tgt.y + tgt.h / 2 : tgt.y) * TS;
+      u.facing = Math.atan2(ty - (u.py + TS / 2), tx - (u.px + TS / 2));
+      if (dist <= u.range) {
+        if (++u.atimer >= u.aspd) {
+          u.atimer = 0;
+          if (u.splash) dealSplash(tx, ty, u.dmg, u.splash * TS, u);
+          else dealDmg(tgt, u.dmg, u);
+          const { cam, canvas } = state;
+          if (u.px >= cam.x - 300 && u.px <= cam.x + canvas.width + 300 &&
+              u.py >= cam.y - 300 && u.py <= cam.y + canvas.height + 300) {
+            playShot(u.type);
+          }
+        }
+      } else {
+        moveAirToward(u, tx, ty);
+        if (state.tick % 30 === 0) autoAttack(u); // retarget if closer option
+      }
+      break;
+    }
+  }
+}
+
+function moveAirToward(u, destPx, destPy) {
+  const cx = u.px + TS / 2, cy = u.py + TS / 2;
+  const dx = destPx - cx, dy = destPy - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < u.speed * 1.5) {
+    if (u.state === 'move') { u.state = 'idle'; u.destPx = undefined; }
+    return;
+  }
+  u.facing = Math.atan2(dy, dx);
+  u.px += (dx / dist) * u.speed;
+  u.py += (dy / dist) * u.speed;
+  u.x = (u.px / TS) | 0;
+  u.y = (u.py / TS) | 0;
+}
+
 function findReachableOre(u) {
   const exclude = new Set();
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -153,9 +217,10 @@ function startReturn(u) {
 function stepPath(u) {
   if (!u.path.length) return;
   const next = u.path[0];
-  const blocker = state.entities.find(e => !e.dead && e.isUnit && e !== u && e.x === next.x && e.y === next.y);
+  const blocker = state.entities.find(e => !e.dead && e.isUnit && e !== u &&
+      e.armorType !== 'air' && e.x === next.x && e.y === next.y);
   if (blocker) {
-    if ((u.type === 'tank' || u.type === 'harvester') &&
+    if (VEHICLE_TYPES.has(u.type) &&
         blocker.faction !== u.faction && blocker.armorType === 'infantry') {
       dealDmg(blocker, blocker.maxHp + 1, u);
     } else {

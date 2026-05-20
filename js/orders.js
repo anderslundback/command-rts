@@ -3,7 +3,16 @@ import { astar } from './pathfinding.js';
 import { nearestOre } from './map.js';
 import { nearestRefinery } from './resources.js';
 
+import { TS } from './constants.js';
+
 export function orderMove(u, tx, ty) {
+  if (u.armorType === 'air') {
+    u.destPx = tx * TS + TS / 2;
+    u.destPy = ty * TS + TS / 2;
+    u.target = null;
+    u.state = 'move';
+    return;
+  }
   u.state = 'move';
   u.target = null;
   u.path = astar(u.x, u.y, tx, ty, false);
@@ -13,7 +22,7 @@ export function orderMove(u, tx, ty) {
 export function orderAttack(u, target) {
   u.state = 'attack';
   u.target = target.id;
-  u.path = [];
+  if (u.armorType !== 'air') u.path = [];
 }
 
 export function orderHarvest(u, refinery) {

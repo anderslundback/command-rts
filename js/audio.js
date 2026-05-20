@@ -57,7 +57,7 @@ export function playShot(type) {
       const g = c.createGain(); g.gain.value = 0.5;
       src.connect(flt); flt.connect(g); g.connect(_master);
       src.start();
-    } else if (type === 'turret') {
+    } else if (type === 'turret' || type === 'antiair' || type === 'aatrack') {
       for (let shot = 0; shot < 3; shot++) {
         setTimeout(() => {
           try {
@@ -75,6 +75,30 @@ export function playShot(type) {
           } catch (_) {}
         }, shot * 75);
       }
+    } else if (type === 'artillery' || type === 'v2rocket' || type === 'tomahawk') {
+      const buf = c.createBuffer(1, (c.sampleRate * 0.35) | 0, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 1.4);
+      const src = c.createBufferSource(); src.buffer = buf;
+      const flt = c.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 180;
+      const g = c.createGain(); g.gain.value = 0.7;
+      src.connect(flt); flt.connect(g); g.connect(_master); src.start();
+    } else if (type === 'gunship') {
+      const buf = c.createBuffer(1, (c.sampleRate * 0.28) | 0, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 1.8);
+      const src = c.createBufferSource(); src.buffer = buf;
+      const flt = c.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 280;
+      const g = c.createGain(); g.gain.value = 0.65;
+      src.connect(flt); flt.connect(g); g.connect(_master); src.start();
+    } else if (type === 'fighter' || type === 'drone' || type === 'scout') {
+      const buf = c.createBuffer(1, (c.sampleRate * 0.12) | 0, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 5);
+      const src = c.createBufferSource(); src.buffer = buf;
+      const flt = c.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 2000; flt.Q.value = 0.7;
+      const g = c.createGain(); g.gain.value = 0.32;
+      src.connect(flt); flt.connect(g); g.connect(_master); src.start();
     }
   } catch (_) {}
 }
@@ -108,8 +132,16 @@ const UNIT_LINES = {
   rifleman:  'Rifleman reporting',
   rocketeer: 'Rocketeer armed and ready',
   harvester: 'Harvester online',
+  scout:     'Scout ready',
+  aatrack:   'AA Track online',
   tank:      'Tank ready for combat',
   mcv:       'MCV ready for deployment',
+  artillery: 'Artillery in position',
+  v2rocket:  'V2 launch ready',
+  tomahawk:  'Tomahawk armed',
+  fighter:   'Fighter airborne',
+  gunship:   'Gunship ready',
+  drone:     'Drone launched',
 };
 
 const BUILD_LINES = {
@@ -118,7 +150,10 @@ const BUILD_LINES = {
   barracks: 'Barracks complete',
   factory:  'War factory online',
   depot:    'Service depot operational',
+  radar:    'Radar online',
+  airfield: 'Airfield operational',
   turret:   'Defense turret active',
+  antiair:  'Anti-air battery active',
 };
 
 export function speakUnit(type) {

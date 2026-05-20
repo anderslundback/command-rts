@@ -73,14 +73,23 @@ export function updateBuilding(b) {
     }
   }
 
-  if (b.type === 'turret' && b.dmg > 0 && hasPwr(b.faction)) {
+  if ((b.type === 'turret' || b.type === 'antiair') && b.dmg > 0 && hasPwr(b.faction)) {
     b.atimer++;
     const curTgt = b.target ? getEnt(b.target) : null;
     if (!curTgt || curTgt.dead) {
       b.target = null;
-      for (const e of state.entities) {
-        if (e.dead || e.faction === b.faction) continue;
-        if (distToEnt(b, e) <= b.range) { b.target = e.id; break; }
+      // Anti-air prioritises air targets; turret takes first in range
+      if (b.type === 'antiair') {
+        for (const e of state.entities) {
+          if (e.dead || e.faction === b.faction) continue;
+          if (e.armorType === 'air' && distToEnt(b, e) <= b.range) { b.target = e.id; break; }
+        }
+      }
+      if (!b.target) {
+        for (const e of state.entities) {
+          if (e.dead || e.faction === b.faction) continue;
+          if (distToEnt(b, e) <= b.range) { b.target = e.id; break; }
+        }
       }
     }
     if (b.target && b.atimer >= b.aspd) {
@@ -92,7 +101,7 @@ export function updateBuilding(b) {
         const { cam, canvas } = state;
         if (bpx >= cam.x - 200 && bpx <= cam.x + canvas.width + 200 &&
             bpy >= cam.y - 200 && bpy <= cam.y + canvas.height + 200) {
-          playShot('turret');
+          playShot(b.type);
         }
       }
     }

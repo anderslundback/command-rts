@@ -26,6 +26,17 @@ export function dealDmg(e, dmg, attacker) {
   }
 }
 
+export function dealSplash(cx, cy, baseDmg, radiusPx, attacker) {
+  const rSq = radiusPx * radiusPx;
+  for (const e of state.entities) {
+    if (e.dead || e.faction === attacker.faction) continue;
+    const ex = e.isBuilding ? (e.x + e.w / 2) * TS : e.px + TS / 2;
+    const ey = e.isBuilding ? (e.y + e.h / 2) * TS : e.py + TS / 2;
+    const dx = ex - cx, dy = ey - cy;
+    if (dx * dx + dy * dy <= rSq) dealDmg(e, baseDmg, attacker);
+  }
+}
+
 export function autoAttack(u) {
   if (!u.dmg) return;
   let nearest = null, nd = u.range + 0.1;

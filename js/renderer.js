@@ -79,7 +79,7 @@ function renderMoveIndicators(ctx) {
 
 function renderBuildings(ctx, VW, VH) {
   const { cam, tick, selected } = state;
-  const LABELS = { command: 'CMD', power: 'PWR', refinery: 'ORE', barracks: 'BRK', factory: 'FAC', depot: 'DEP', turret: 'TRT' };
+  const LABELS = { command: 'CMD', power: 'PWR', refinery: 'ORE', barracks: 'BRK', factory: 'FAC', depot: 'DEP', radar: 'RDR', airfield: 'AIR', turret: 'TRT', antiair: 'AAA' };
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
   for (const e of state.entities) {
@@ -196,6 +196,46 @@ function renderUnits(ctx, VW, VH) {
       ctx.strokeStyle = bc; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(cx, cy-3); ctx.lineTo(cx+5, cy-8); ctx.stroke();
       ctx.beginPath(); ctx.arc(cx+5, cy-9, 4, Math.PI*0.1, Math.PI*1.0); ctx.stroke();
+    } else if (e.type === 'scout' || e.type === 'aatrack') {
+      const bc = flash ? `rgb(255,${(1-flash)*80|0},${(1-flash)*80|0})` : fd.color;
+      ctx.fillStyle = fd.dark; ctx.fillRect(e.px+4, e.py+6, TS-8, TS-12);
+      ctx.strokeStyle = bc; ctx.lineWidth = 1; ctx.strokeRect(e.px+4.5, e.py+6.5, TS-9, TS-13);
+      ctx.fillStyle = bc; ctx.beginPath(); ctx.arc(cx, cy, r*0.38, 0, Math.PI*2); ctx.fill();
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(e.facing);
+      if (e.type === 'aatrack') {
+        ctx.fillStyle = fd.dark;
+        ctx.fillRect(1, -3, r+4, 2); ctx.fillRect(1, 1, r+4, 2);
+      } else {
+        ctx.fillStyle = fd.dark; ctx.fillRect(0, -1.5, r+6, 3);
+      }
+      ctx.restore();
+    } else if (e.type === 'artillery' || e.type === 'v2rocket' || e.type === 'tomahawk') {
+      const bc = flash ? `rgb(255,${(1-flash)*80|0},${(1-flash)*80|0})` : fd.color;
+      ctx.fillStyle = fd.dark; ctx.fillRect(e.px+2, e.py+8, TS-4, TS-16);
+      ctx.strokeStyle = bc; ctx.lineWidth = 1; ctx.strokeRect(e.px+2.5, e.py+8.5, TS-5, TS-17);
+      ctx.fillStyle = bc; ctx.beginPath(); ctx.arc(cx, cy, r*0.42, 0, Math.PI*2); ctx.fill();
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(e.facing);
+      ctx.fillStyle = fd.dark; ctx.fillRect(0, -1.5, r+11, 3);
+      ctx.restore();
+    } else if (e.type === 'fighter' || e.type === 'gunship' || e.type === 'drone') {
+      const altitude = 12;
+      // Ground shadow
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(cx+6, cy+6, r+2, r*0.4, 0, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+      // Aircraft body above ground
+      const ay = cy - altitude;
+      const bc = flash ? `rgb(255,${(1-flash)*80|0},${(1-flash)*80|0})` : fd.color;
+      ctx.save(); ctx.translate(cx, ay); ctx.rotate(e.facing + Math.PI / 2);
+      ctx.fillStyle = fd.dark;
+      ctx.beginPath();
+      ctx.moveTo(0, -r); ctx.lineTo(r*0.6, r*0.6); ctx.lineTo(-r*0.6, r*0.6); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = bc; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = bc;
+      ctx.fillRect(-r*0.9, -r*0.1, r*1.8, r*0.28);
+      ctx.restore();
     } else if (e.type === 'rocketeer') {
       const sc = flash ? `rgb(255,${(1-flash)*60|0},${(1-flash)*60|0})` : fd.color;
       ctx.fillStyle = fd.dark; ctx.beginPath(); ctx.arc(cx, cy, r+1, 0, Math.PI*2); ctx.fill();
@@ -249,6 +289,18 @@ function renderDragBox(ctx) {
 
 export function renderMinimap() {
   if (!state.radar || !state.radarCtx) return;
+  const pf = state.playerFaction;
+  const hasRadar = state.entities.some(
+    e => !e.dead && e.isBuilding && e.faction === pf && e.type === 'radar' && e.done
+  );
+  if (!hasRadar) {
+    const mmx = state.radarCtx, mw = state.radar.width, mh = state.radar.height;
+    mmx.fillStyle = '#050810'; mmx.fillRect(0, 0, mw, mh);
+    mmx.fillStyle = '#2a3a4a'; mmx.font = 'bold 11px monospace';
+    mmx.textAlign = 'center'; mmx.textBaseline = 'middle';
+    mmx.fillText('NO RADAR', mw / 2, mh / 2); mmx.textAlign = 'left';
+    return;
+  }
   if (!state.minimapDirty && state.tick % 4 !== 0) return;
   state.minimapDirty = false;
   const mmx = state.radarCtx;

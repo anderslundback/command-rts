@@ -1,6 +1,6 @@
 # COMMAND — Game Design Document
 
-Version 0.2 | 2026-05-18
+Version 0.3 | 2026-05-20
 
 ---
 
@@ -62,29 +62,39 @@ Destroy all enemy Command Centers → Victory
 |---|---|---|---|---|---|
 | Command Center | — | 1200 | −2 | None | Player must protect this above all else |
 | Power Plant | $300 | 350 | +5 | Command Center | Build early; shortfalls disable structures |
-| Barracks | $400 | 500 | −1 | Command Center + Power | Trains Riflemen and Rocketeers |
-| War Factory | $700 | 700 | −2 | Command Center + Power | Core vehicle production facility |
-| Refinery | $500 | 600 | −1 | Command Center + Power | Harvesters deliver here; more Refineries = more storage |
-| Service Depot | $600 | 450 | −1 | War Factory | Repairs vehicles; unlocks MCV at War Factory |
-| Radar | TBD | — | −1 | Command Center + Power | Precise effect TBD in implementation |
+| Barracks | $400 | 500 | −1 | Command Center + Power | Trains infantry |
+| War Factory | $700 | 700 | −2 | Command Center + Power | Trains vehicles |
+| Refinery | $500 | 600 | −1 | Command Center + Power | Harvesters deliver here; more = more storage |
+| Service Depot | $600 | 450 | −1 | War Factory | Repairs vehicles; unlocks MCV |
+| Radar | $500 | 300 | −2 | Refinery | Enables minimap; unlocks artillery, airfield, anti-air |
+| Airfield | $800 | 400 | −2 | Radar | Trains faction aircraft |
 
 ### Defence Structures
 
 | Building | Cost | HP | Power | Prereqs | Notes |
 |---|---|---|---|---|---|
 | Turret | $350 | 280 | −1 | Barracks | ATK 18, RNG 6; stops firing without power |
+| Anti-Air | $400 | 250 | −1 | Radar | ATK 30, RNG 8; prioritises aircraft; `flak` weapon |
 
 ---
 
 ## 5. Units
 
-| Unit | Cost | HP | Trains From | Role | Weapon Type | Notes |
+| Unit | Cost | HP | Trains From | Role | Weapon | Notes |
 |---|---|---|---|---|---|---|
 | Rifleman | $200 | 80 | Barracks | Light anti-infantry | small_arms | Cheap, fast to train; weak vs. armor |
 | Rocketeer | $350 | 60 | Barracks | Anti-armor infantry | rockets | Effective vs. vehicles and structures |
-| Harvester | $800 | 200 | War Factory | Economy — collects ore | None (unarmed) | Automatically pathfinds to ore and returns to Refinery |
-| Tank | $650 | 320 | War Factory | Heavy assault vehicle | cannon | BROTHERHOOD gets cheaper tanks + HP bonus |
-| MCV | $1200 | 300 | War Factory | Mobile Command Vehicle | None (unarmed) | Deploying (F) creates a new Command Center; requires Service Depot |
+| Harvester | $800 | 200 | War Factory | Economy — collects ore | — | Auto-pathfinds ore, returns to Refinery |
+| Scout | $480 | 150 | War Factory | Fast anti-infantry | machinegun | Faster than tank; shreds infantry; light armor |
+| AA Track | $520 | 130 | War Factory | Mobile anti-air | flak | Fast, targets aircraft; needs Radar |
+| Tank | $650 | 320 | War Factory | Heavy assault vehicle | cannon | BROTHERHOOD gets HP bonus |
+| MCV | $1200 | 300 | War Factory | Mobile Command Vehicle | — | Deploy (F) → new Command Center; needs Service Depot |
+| Artillery *(ALLIANCE)* | $900 | 120 | War Factory | Long-range siege | cannon | RNG 8, splash 1.5t, slow; needs Radar |
+| V2 Rocket *(BROTHERHOOD)* | $900 | 120 | War Factory | Rocket artillery | rockets | RNG 8, splash 1.5t, slow; needs Radar |
+| Tomahawk *(SYNDICATE)* | $850 | 100 | War Factory | Precision missiles | rockets | RNG 8, splash 1.5t; needs Radar |
+| Fighter *(ALLIANCE)* | $800 | 80 | Airfield | Air superiority | strafe | Flies over terrain; fast; light vs. ground |
+| Gunship *(BROTHERHOOD)* | $1100 | 220 | Airfield | Heavy bomber | bombs | Splash 1.2t; devastates buildings |
+| Drone *(SYNDICATE)* | $600 | 60 | Airfield | Fast attack drone | strafe | Very fast; swarm tactics |
 
 ---
 
@@ -125,12 +135,18 @@ Destroy all enemy Command Centers → Victory
 
 Damage is resolved through a weapon-type × armor-type multiplier table (`ARMOR_MULT`). This creates a rock-paper-scissors relationship between unit classes.
 
-| Weapon Type | Source | Effective Against |
-|---|---|---|
-| small_arms | Rifleman | Infantry |
-| rockets | Rocketeer | Vehicles, structures |
-| cannon | Tank | Structures, vehicles |
-| gun | Turret | General purpose |
+| Weapon Type | Source | Effective Against | Poor Against |
+|---|---|---|---|
+| small_arms | Rifleman | Infantry | Vehicles, aircraft |
+| rockets | Rocketeer, V2, Tomahawk | Heavy vehicles, structures | Infantry |
+| cannon | Tank, Artillery | Heavy, structures | Infantry, aircraft |
+| gun | Turret | General purpose | Aircraft |
+| machinegun | Scout | Infantry | Heavy armor |
+| strafe | Fighter, Drone | Infantry, light vehicles | Heavy armor, buildings |
+| bombs | Gunship | Structures, vehicles (splash) | Aircraft |
+| flak | Anti-Air gun, AA Track | **Aircraft** (×2.5) | Heavy armor, buildings |
+
+Aircraft have `air` armor type. Ground weapons deal 0–25% damage vs. aircraft; only `flak` is fully effective.
 
 Exact multiplier values are defined in `ARMOR_MULT` and subject to balance tuning.
 

@@ -33,8 +33,12 @@ export function makeAI(f) {
           !has('barracks') && has('refinery') && cr >= 400 && ['barracks', cmd.x + 4, cmd.y + 3],
           !has('factory')  && has('barracks') && cr >= 700 && ['factory',  cmd.x - 4, cmd.y],
           !has('depot')    && has('factory')  && cr >= 600 && ['depot',    cmd.x - 4, cmd.y + 3],
-          has('barracks')  && this.myBuildings('turret').length < 5 && cr >= 350 &&
+          !has('radar')    && has('refinery') && cr >= 500 && ['radar',    cmd.x + 3, cmd.y - 3],
+          !has('airfield') && has('radar')    && cr >= 800 && ['airfield', cmd.x - 5, cmd.y],
+          has('barracks')  && this.myBuildings('turret').length < 4 && cr >= 350 &&
             ['turret', cmd.x + ((Math.random() * 10 - 5) | 0), cmd.y + ((Math.random() * 10 - 5) | 0)],
+          has('radar') && this.myBuildings('antiair').length < 2 && cr >= 400 &&
+            ['antiair', cmd.x + ((Math.random() * 10 - 5) | 0), cmd.y + ((Math.random() * 10 - 5) | 0)],
         ].find(Boolean);
         if (tried) this._tryBuild(...tried);
       }
@@ -42,14 +46,25 @@ export function makeAI(f) {
       if (this.btimer % 150 === 0) {
         const bar = this.myBuildings('barracks').find(b => b.trainQ.length < 3);
         const fac = this.myBuildings('factory').find(b => b.trainQ.length < 3);
+        const airFac = this.myBuildings('airfield').find(b => b.trainQ.length < 3);
+        const artType = ['artillery', 'v2rocket', 'tomahawk'][this.f];
+        const airType = ['fighter', 'gunship', 'drone'][this.f];
         const harvesters  = this.myUnits('harvester').length;
         const riflemen    = this.myUnits('rifleman').length;
         const rocketeers  = this.myUnits('rocketeer').length;
+        const scouts      = this.myUnits('scout').length;
+        const aatracks    = this.myUnits('aatrack').length;
         const tanks       = this.myUnits('tank').length;
+        const artCount    = this.myUnits(artType).length;
+        const airCount    = this.myUnits(airType).length;
         if (fac && harvesters < 3 && cr >= 800) this._queue(fac, 'harvester');
-        else if (bar && riflemen < 8 && cr >= 200) this._queue(bar, 'rifleman');
-        else if (bar && rocketeers < 4 && cr >= 350) this._queue(bar, 'rocketeer');
-        else if (fac && tanks < 6 && cr >= 650) this._queue(fac, 'tank');
+        else if (bar && riflemen < 6 && cr >= 200) this._queue(bar, 'rifleman');
+        else if (bar && rocketeers < 3 && cr >= 350) this._queue(bar, 'rocketeer');
+        else if (fac && scouts < 4 && cr >= 480) this._queue(fac, 'scout');
+        else if (fac && has('radar') && aatracks < 2 && cr >= 520) this._queue(fac, 'aatrack');
+        else if (fac && tanks < 5 && cr >= 650) this._queue(fac, 'tank');
+        else if (fac && has('radar') && artCount < 3 && cr >= UDEF[artType].cost) this._queue(fac, artType);
+        if (airFac && airCount < 4 && cr >= UDEF[airType].cost) this._queue(airFac, airType);
       }
 
       for (const u of this.myUnits('harvester'))
@@ -57,7 +72,13 @@ export function makeAI(f) {
 
       if (this.wtimer > 720 + ((Math.random() * 360) | 0)) {
         this.wtimer = 0;
-        const fighters = [...this.myUnits('rifleman'), ...this.myUnits('rocketeer'), ...this.myUnits('tank')];
+        const artType = ['artillery', 'v2rocket', 'tomahawk'][this.f];
+        const airType = ['fighter', 'gunship', 'drone'][this.f];
+        const fighters = [
+          ...this.myUnits('rifleman'), ...this.myUnits('rocketeer'),
+          ...this.myUnits('scout'), ...this.myUnits('aatrack'),
+          ...this.myUnits('tank'), ...this.myUnits(artType), ...this.myUnits(airType),
+        ];
         if (fighters.length >= 4) {
           const enemyUnits = state.entities.filter(e => !e.dead && e.isUnit && e.faction !== this.f &&
             (e.type === 'rifleman' || e.type === 'rocketeer' || e.type === 'tank'));

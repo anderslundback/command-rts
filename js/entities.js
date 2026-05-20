@@ -54,6 +54,7 @@ export class Unit extends Ent {
     this.aspd = d.aspd;
     this.armorType  = d.armor  ?? 'infantry';
     this.weaponType = d.weapon ?? null;
+    this.splash     = d.splash ?? 0;
     this.isUnit = true;
     this.state = 'idle';
     this.path = [];

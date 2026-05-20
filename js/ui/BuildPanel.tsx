@@ -487,6 +487,8 @@ function TrainTab(): React.ReactElement {
   for (const [btype, utypes] of Object.entries(TRAIN_FROM)) {
     if (!doneTypes.includes(btype)) continue;
     for (const utype of utypes) {
+      const d = UDEF[utype];
+      if (d?.factionOnly !== undefined && d.factionOnly !== playerFaction) continue;
       trainEntries.push({ bldgType: btype, utype });
     }
   }
@@ -533,7 +535,7 @@ function TrainTab(): React.ReactElement {
       {trainEntries.map(({ bldgType, utype }) => {
         const d = UDEF[utype];
         const canAfford = credits >= d.cost;
-        const depotOk = utype !== 'mcv' || doneTypes.includes('depot');
+        const prereqOk = !UDEF[utype]?.prereq || doneTypes.includes(UDEF[utype].prereq);
         const f = state.playerFaction;
         const done = state.entities.filter(
           (e: any) => !e.dead && e.isBuilding && e.faction === f && e.done
@@ -544,7 +546,7 @@ function TrainTab(): React.ReactElement {
           primaryEnt && !primaryEnt.dead && primaryEnt.type === bldgType
             ? primaryEnt
             : done.find((b: any) => b.type === bldgType);
-        const qFull = !building || building.trainQ.length >= 5 || !depotOk;
+        const qFull = !building || building.trainQ.length >= 5 || !prereqOk;
 
         const activeItem =
           building?.trainQ?.length > 0 && building.trainQ[0].type === utype
@@ -559,7 +561,7 @@ function TrainTab(): React.ReactElement {
           <BuildBtn
             key={`${bldgType}-${utype}`}
             name={d.name}
-            sub={utype === 'mcv' && !depotOk ? 'needs depot' : `$${d.cost}`}
+            sub={!prereqOk ? `needs ${UDEF[utype]?.prereq ?? '?'}` : `$${d.cost}`}
             disabled={qFull}
             affordable={canAfford}
             dataType={utype}

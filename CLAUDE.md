@@ -57,12 +57,15 @@ All entity updates happen in `game.js`'s `loop()`. The loop calls `syncFromGameS
 | `js/ai.js` | Per-faction AI controller |
 | `js/map.js` | Procedural map gen, tile passability, ore regen |
 | `js/placement.js` | `canPlace`, `placeBuilding`, `spawnUnit`, `deployMcvInPlace` |
-| `js/combat.js`, `js/orders.js`, `js/pathfinding.js`, `js/resources.js` | Pure helpers |
+| `js/combat.js` | `dealDmg`, `dealSplash` (area damage for artillery/aircraft), `autoAttack` |
+| `js/orders.js`, `js/pathfinding.js`, `js/resources.js` | Pure helpers |
 | `js/particles.js`, `js/audio.js` | Effects and voice lines |
 
 ## Key conventions
 
-**Faction indices:** 0=ALLIANCE, 1=BROTHERHOOD, 2=SYNDICATE. `FBONUSES[f]` gives per-faction stat multipliers.
+**Faction indices:** 0=ALLIANCE, 1=BROTHERHOOD, 2=SYNDICATE. `FBONUSES[f]` gives per-faction stat multipliers. Faction-exclusive units use `factionOnly: 0|1|2` in UDEF; BuildPanel filters them by player faction.
+
+**Air units** (`armorType === 'air'`): bypass `updateUnit` → `updateAirUnit`. Move pixel-by-pixel with `moveAirToward()` — no A* pathfinding. Immune to crush, invisible to ground-unit path-blockers. `orderMove` sets `u.destPx/u.destPy` for air units instead of a tile path.
 
 **Coordinates:** Tiles are 32×32px (`TS=32`). Map is 80×60 tiles. `e.x/e.y` = tile coords; `e.px/e.py` = pixel (interpolated). Camera at `state.cam.x/y` pixel offset.
 
