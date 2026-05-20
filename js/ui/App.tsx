@@ -4,6 +4,7 @@ import { HUD } from './HUD';
 import { Sidebar } from './Sidebar';
 import { Menu } from './Menu';
 import { PauseMenu } from './PauseMenu';
+import { LobbyScreen } from './LobbyScreen';
 
 export function App(): React.ReactElement {
   const phase = useUIStore(s => s.phase);
@@ -18,7 +19,6 @@ export function App(): React.ReactElement {
         fontFamily: "'Courier New', monospace",
       }}
     >
-      {/* Always-visible HUD elements when game is running */}
       {(phase === 'playing' || phase === 'paused') && (
         <>
           <HUD />
@@ -26,10 +26,10 @@ export function App(): React.ReactElement {
         </>
       )}
 
-      {/* Faction select or game-over screen */}
       {(phase === 'menu' || phase === 'gameover') && <Menu />}
 
-      {/* Pause overlay */}
+      {phase === 'lobby' && <LobbyScreen />}
+
       {phase === 'paused' && <PauseMenu />}
     </div>
   );

@@ -3,4 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __WS_URL__: JSON.stringify(process.env.VITE_WS_URL ?? 'ws://localhost:3001'),
+  },
 });

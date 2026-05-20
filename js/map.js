@@ -1,42 +1,51 @@
 import { MW, MH, T } from './constants.js';
 import { state } from './state.js';
 
-export function genMap() {
+function seededRng(seed) {
+  let s = seed >>> 0;
+  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 0x100000000; };
+}
+
+export function genMapFromSeed(seed) {
+  const rng = seededRng(seed);
   state.map = Array.from({ length: MH }, () => new Int8Array(MW));
 
   for (let i = 0; i < 8; i++) {
-    const cx = 5 + (Math.random() * (MW - 10)) | 0;
-    const cy = 5 + (Math.random() * (MH - 10)) | 0;
-    const r = 1 + (Math.random() * 3) | 0;
+    const cx = 5 + (rng() * (MW - 10)) | 0;
+    const cy = 5 + (rng() * (MH - 10)) | 0;
+    const r = 1 + (rng() * 3) | 0;
     for (let dy = -r; dy <= r; dy++)
       for (let dx = -r; dx <= r; dx++)
         if (dx * dx + dy * dy <= r * r + r) setTile(cx + dx, cy + dy, T.WATER);
   }
 
   for (let i = 0; i < 30; i++) {
-    const cx = (Math.random() * MW) | 0;
-    const cy = (Math.random() * MH) | 0;
+    const cx = (rng() * MW) | 0;
+    const cy = (rng() * MH) | 0;
     for (let j = 0; j < 4; j++)
-      setTile(cx + ((Math.random() * 6 - 3) | 0), cy + ((Math.random() * 6 - 3) | 0), T.ROCK);
+      setTile(cx + ((rng() * 6 - 3) | 0), cy + ((rng() * 6 - 3) | 0), T.ROCK);
   }
 
-  // 3 private patches per player (symmetric) + 3 neutral patches
   const oreSeeds = [
-    [18,13],[10,23],[21,24],   // P0 (7,7) private
-    [60,13],[68,23],[57,24],   // P1 (69,7) private — left-right mirror of P0
-    [28,40],[50,40],[39,35],   // P2 (39,48) private — symmetric about x=39
-    [25,28],[53,28],[39,16],   // neutral contested
+    [18,13],[10,23],[21,24],
+    [60,13],[68,23],[57,24],
+    [28,40],[50,40],[39,35],
+    [25,28],[53,28],[39,16],
   ];
   for (const [ox, oy] of oreSeeds)
     for (let dy = -4; dy <= 4; dy++)
       for (let dx = -4; dx <= 4; dx++)
-        if (dx*dx+dy*dy <= 18 && Math.random() < 0.65 && getTile(ox+dx,oy+dy) === T.GRASS)
+        if (dx*dx+dy*dy <= 18 && rng() < 0.65 && getTile(ox+dx,oy+dy) === T.GRASS)
           setTile(ox + dx, oy + dy, T.ORE);
 
   for (const [sx, sy] of startPositions())
     for (let dy = -6; dy <= 9; dy++)
       for (let dx = -6; dx <= 9; dx++)
         setTile(sx + dx, sy + dy, T.GRASS);
+}
+
+export function genMap() {
+  genMapFromSeed((Math.random() * 0xffffffff) >>> 0);
 }
 
 export function setTile(x, y, t) {

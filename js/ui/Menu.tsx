@@ -1,7 +1,11 @@
 import React from 'react';
-import { useUIStore } from '../store';
+import { useUIStore, uiStore } from '../store';
 // @ts-ignore
 import { FDATA } from '../constants.js';
+// @ts-ignore
+import { net } from '../net/netClient.js';
+
+declare const __WS_URL__: string;
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -140,14 +144,72 @@ export function Menu(): React.ReactElement {
   const playerFaction = useUIStore(s => s.playerFaction);
   const gameStats = useUIStore(s => s.gameStats);
 
+  const [subPhase, setSubPhase] = React.useState<'main' | 'skirmish' | 'join'>('main');
+  const [joinCode, setJoinCode] = React.useState('');
+  const [playerName, setPlayerName] = React.useState('');
+  const [netError, setNetError] = React.useState('');
+
   const handleFactionSelect = (i: number) => {
     // @ts-ignore
     import('../game.js').then((m: any) => m.startGame(i)).catch(console.error);
   };
 
   const handleReturnToMenu = () => {
+    setSubPhase('main');
+    setNetError('');
     // @ts-ignore
     import('../game.js').then((m: any) => m.showMenu()).catch(console.error);
+    uiStore.setState({ lobby: null, net: { connected: false, role: 'none', latencyMs: 0 } });
+    net.disconnect();
+  };
+
+  const handleCreateGame = () => {
+    const name = playerName.trim() || 'Player 1';
+    setNetError('');
+    net.connect(__WS_URL__);
+    net.on('room_created', (msg: any) => {
+      uiStore.setState({
+        phase: 'lobby',
+        lobby: {
+          roomCode: msg.code,
+          players: msg.players,
+          chatMessages: [],
+          mySlot: msg.slot,
+          isHost: true,
+          myName: name,
+        },
+      });
+    });
+    net.on('error', (msg: any) => setNetError(msg.reason ?? 'Connection error'));
+    net.send({ type: 'create_room', name });
+  };
+
+  const handleJoinGame = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length !== 4) { setNetError('Enter a 4-letter room code'); return; }
+    const name = playerName.trim() || 'Player 2';
+    setNetError('');
+    net.connect(__WS_URL__);
+    net.on('room_joined', (msg: any) => {
+      uiStore.setState({
+        phase: 'lobby',
+        lobby: {
+          roomCode: msg.code,
+          players: msg.players,
+          chatMessages: [],
+          mySlot: msg.slot,
+          isHost: false,
+          myName: name,
+        },
+      });
+    });
+    net.on('lobby_update', (msg: any) => {
+      uiStore.setState((st: any) => ({
+        lobby: st.lobby ? { ...st.lobby, players: msg.players } : null,
+      }));
+    });
+    net.on('error', (msg: any) => setNetError(msg.reason ?? 'Connection error'));
+    net.send({ type: 'join_room', code, name });
   };
 
   const isWin = phase === 'gameover' && winnerFaction === playerFaction;
@@ -170,29 +232,113 @@ export function Menu(): React.ReactElement {
     >
       {phase === 'menu' && (
         <>
-          {/* Title */}
           <div
-            style={{
-              fontSize: 42,
-              fontWeight: 'bold',
-              letterSpacing: 10,
-              color: '#4af',
-              textShadow: '0 0 24px #4af8',
-              marginBottom: 8,
-            }}
+            style={{ fontSize: 42, fontWeight: 'bold', letterSpacing: 10, color: '#4af', textShadow: '0 0 24px #4af8', marginBottom: 8 }}
           >
             COMMAND
           </div>
 
-          <div style={{ color: '#668', fontSize: 12, letterSpacing: 2, marginBottom: 8 }}>
-            SELECT YOUR FACTION
-          </div>
+          {/* Name input (shared) */}
+          {(subPhase === 'main' || subPhase === 'join') && (
+            <input
+              value={playerName}
+              onChange={e => setPlayerName(e.target.value)}
+              placeholder="Your name"
+              maxLength={20}
+              style={{
+                background: '#060d14', border: '1px solid #1a2230', color: '#9ab',
+                fontFamily: "'Courier New', monospace", fontSize: 13, letterSpacing: 2,
+                padding: '6px 12px', outline: 'none', width: 220, marginBottom: 12,
+              }}
+            />
+          )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {(FDATA as FactionDef[]).map((fd, i) => (
-              <FactionButton key={i} index={i} fd={fd} onSelect={handleFactionSelect} />
-            ))}
-          </div>
+          {subPhase === 'main' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ color: '#668', fontSize: 11, letterSpacing: 2, marginBottom: 2 }}>SELECT MODE</div>
+              {(['SKIRMISH', 'CREATE GAME', 'JOIN GAME'] as const).map((label, i) => (
+                <button
+                  key={label}
+                  onClick={() => {
+                    if (i === 0) setSubPhase('skirmish');
+                    else if (i === 1) handleCreateGame();
+                    else setSubPhase('join');
+                  }}
+                  style={{
+                    background: '#06080e', border: '2px solid #1a2230', color: '#4af',
+                    fontFamily: "'Courier New', monospace", fontSize: 14, fontWeight: 'bold',
+                    letterSpacing: 3, padding: '12px 32px', cursor: 'pointer', width: 220,
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#4af'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1a2230'; }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {subPhase === 'skirmish' && (
+            <>
+              <div style={{ color: '#668', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>SELECT YOUR FACTION</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {(FDATA as FactionDef[]).map((fd, i) => (
+                  <FactionButton key={i} index={i} fd={fd} onSelect={handleFactionSelect} />
+                ))}
+              </div>
+              <button
+                onClick={() => setSubPhase('main')}
+                style={{
+                  marginTop: 12, background: 'transparent', border: 'none', color: '#446',
+                  fontFamily: "'Courier New', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: 1,
+                }}
+              >
+                ← BACK
+              </button>
+            </>
+          )}
+
+          {subPhase === 'join' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+              <div style={{ color: '#668', fontSize: 11, letterSpacing: 2, marginBottom: 2 }}>ENTER ROOM CODE</div>
+              <input
+                value={joinCode}
+                onChange={e => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
+                placeholder="ABCD"
+                maxLength={4}
+                style={{
+                  background: '#060d14', border: '1px solid #1a2230', color: '#4af',
+                  fontFamily: "'Courier New', monospace", fontSize: 22, letterSpacing: 8,
+                  padding: '8px 16px', outline: 'none', width: 120, textAlign: 'center',
+                }}
+              />
+              <button
+                onClick={handleJoinGame}
+                style={{
+                  background: '#06080e', border: '2px solid #1a2230', color: '#4af',
+                  fontFamily: "'Courier New', monospace", fontSize: 13, fontWeight: 'bold',
+                  letterSpacing: 3, padding: '10px 28px', cursor: 'pointer', width: 180,
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#4af'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1a2230'; }}
+              >
+                JOIN
+              </button>
+              <button
+                onClick={() => { setSubPhase('main'); setNetError(''); }}
+                style={{
+                  background: 'transparent', border: 'none', color: '#446',
+                  fontFamily: "'Courier New', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: 1,
+                }}
+              >
+                ← BACK
+              </button>
+            </div>
+          )}
+
+          {netError && (
+            <div style={{ color: '#f64', fontSize: 11, letterSpacing: 1, marginTop: 8 }}>{netError}</div>
+          )}
         </>
       )}
 

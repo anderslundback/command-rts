@@ -54,4 +54,5 @@ export const state = {
   gameOverDelay: 0,
   gameStats: { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0, powerHistory: [] },
   fog: { explored: null, visible: null },
+  net: null, // null = skirmish; { role, myFaction, commandQueue, snapshotTick } = multiplayer
 };

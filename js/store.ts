@@ -48,6 +48,33 @@ export interface EntUI {
   repairing: boolean;
 }
 
+// ── Multiplayer types ────────────────────────────────────────────────────────
+
+export interface PlayerEntry {
+  slot: number;
+  name: string;
+  faction: number;
+  ready: boolean;
+  isHost: boolean;
+  isAI: boolean;
+  latencyMs: number;
+}
+
+export interface LobbyState {
+  roomCode: string;
+  players: PlayerEntry[];
+  chatMessages: { slot: number; name: string; text: string }[];
+  mySlot: number;
+  isHost: boolean;
+  myName: string;
+}
+
+export interface NetState {
+  connected: boolean;
+  role: 'none' | 'host' | 'client';
+  latencyMs: number;
+}
+
 // ── Store shape ──────────────────────────────────────────────────────────────
 
 export interface PowerPoint {
@@ -63,7 +90,7 @@ export interface GameStats {
 }
 
 export interface UIState {
-  phase: 'menu' | 'playing' | 'paused' | 'gameover';
+  phase: 'menu' | 'lobby' | 'playing' | 'paused' | 'gameover';
   playerFaction: number;
   winnerFaction: number;
   winnerName: string;
@@ -84,6 +111,8 @@ export interface UIState {
   sel: EntUI[];
   trainQueues: TrainQueueUI[];
   primaryBuilding: Record<string, number>;
+  lobby: LobbyState | null;
+  net: NetState;
 }
 
 // ── Initial state ────────────────────────────────────────────────────────────
@@ -110,6 +139,8 @@ const initialState: UIState = {
   sel: [],
   trainQueues: [],
   primaryBuilding: {},
+  lobby: null,
+  net: { connected: false, role: 'none', latencyMs: 0 },
 };
 
 // ── Zustand vanilla store ────────────────────────────────────────────────────

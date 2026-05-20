@@ -10,6 +10,8 @@ export function HUD(): React.ReactElement {
   const powerGen = useUIStore(s => s.powerGen);
   const statusMsg = useUIStore(s => s.statusMsg);
   const fps = useUIStore(s => s.fps);
+  const netState = useUIStore(s => s.net);
+  const lobby = useUIStore(s => s.lobby);
 
   const fd = FDATA[playerFaction] as { name: string; color: string };
   const powerOk = powerGen >= powerUsed;
@@ -79,6 +81,13 @@ export function HUD(): React.ReactElement {
       )}
 
       <div style={{ flex: 1 }} />
+
+      {/* Net indicator */}
+      {netState.role !== 'none' && (
+        <span style={{ color: '#3a5060', fontSize: 10, letterSpacing: 1 }}>
+          {lobby?.roomCode} NET {netState.latencyMs}ms
+        </span>
+      )}
 
       {/* FPS counter */}
       <span style={{ color: '#445', fontSize: 10 }}>{fps} FPS</span>

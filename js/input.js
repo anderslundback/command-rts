@@ -8,6 +8,7 @@ import { canPlace, placeBuilding, deployMcvInPlace } from './placement.js';
 import { nearestRefinery, calcPower } from './resources.js';
 import { orderMove, orderAttack, orderHarvest } from './orders.js';
 import { setMsg, updateBuildPanel, switchTab } from './hud.js';
+import { dispatchCommand } from './net/netClient.js';
 
 export function initInput() {
   const canvas = state.canvas;
@@ -111,6 +112,8 @@ function onClick(ev) {
     if (clicked?.isBuilding && clicked.faction === f && clicked.done) {
       if (clicked.hp >= clicked.maxHp) {
         setMsg('Already at full HP', 60);
+      } else if (state.net?.role === 'client') {
+        dispatchCommand({ action: 'repair', entId: clicked.id, toggle: !clicked.repairing });
       } else {
         clicked.repairing = !clicked.repairing;
         setMsg(clicked.repairing ? 'Repairing ' + BDEF[clicked.type].name : 'Repair stopped');
@@ -122,13 +125,17 @@ function onClick(ev) {
   if (state.sellMode) {
     const clicked = getEntAt(tx, ty);
     if (clicked?.isBuilding && clicked.faction === f && clicked.done) {
-      const refund = Math.floor(BDEF[clicked.type].cost * 0.5 * (clicked.hp / clicked.maxHp));
-      state.credits[f] += refund;
-      clicked.dead = true;
-      calcPower();
-      state.minimapDirty = true;
-      setMsg('Sold ' + BDEF[clicked.type].name + ' for $' + refund, 150);
-      updateBuildPanel();
+      if (state.net?.role === 'client') {
+        dispatchCommand({ action: 'sell', entId: clicked.id });
+      } else {
+        const refund = Math.floor(BDEF[clicked.type].cost * 0.5 * (clicked.hp / clicked.maxHp));
+        state.credits[f] += refund;
+        clicked.dead = true;
+        calcPower();
+        state.minimapDirty = true;
+        setMsg('Sold ' + BDEF[clicked.type].name + ' for $' + refund, 150);
+        updateBuildPanel();
+      }
     }
     return;
   }
@@ -137,11 +144,15 @@ function onClick(ev) {
     if (!canPlace(state.buildMode, tx, ty, f)) {
       setMsg('Cannot place here!', 90); return;
     }
-    const placed = placeBuilding(f, state.buildMode, tx, ty, true);
-    if (placed && state.buildReady) {
-      for (const q of [state.hudBuildQueue[f], state.hudDefQueue[f]]) {
-        const idx = q.findIndex(it => it.type === state.buildMode && it.ready);
-        if (idx >= 0) { q.splice(idx, 1); break; }
+    if (state.net?.role === 'client') {
+      dispatchCommand({ action: 'place', faction: f, btype: state.buildMode, tx, ty });
+    } else {
+      const placed = placeBuilding(f, state.buildMode, tx, ty, true);
+      if (placed && state.buildReady) {
+        for (const q of [state.hudBuildQueue[f], state.hudDefQueue[f]]) {
+          const idx = q.findIndex(it => it.type === state.buildMode && it.ready);
+          if (idx >= 0) { q.splice(idx, 1); break; }
+        }
       }
     }
     if (!ev.shiftKey) {
@@ -237,6 +248,7 @@ function onRightClick(ev) {
   // Right-click own building → set as primary (always, regardless of unit selection)
   if (target?.isBuilding && target.faction === f) {
     state.primaryBuilding[target.type] = target.id;
+    if (state.net?.role === 'client') dispatchCommand({ action: 'set_primary', btype: target.type, entId: target.id });
     setMsg(BDEF[target.type].name + ' set as primary', 90);
     updateBuildPanel();
     return;
@@ -252,10 +264,14 @@ function onRightClick(ev) {
       .map(id => getEnt(id))
       .filter(e => e?.isBuilding && e.faction === f && e.done);
     if (selBuildings.length) {
-      selBuildings.forEach(b => { b.waypoint = { tx, ty }; });
-      setMsg(selBuildings.length === 1
-        ? BDEF[selBuildings[0].type].name + ' waypoint set'
-        : selBuildings.length + ' waypoints set', 60);
+      if (state.net?.role === 'client') {
+        selBuildings.forEach(b => dispatchCommand({ action: 'waypoint', entId: b.id, tx, ty }));
+      } else {
+        selBuildings.forEach(b => { b.waypoint = { tx, ty }; });
+        setMsg(selBuildings.length === 1
+          ? BDEF[selBuildings[0].type].name + ' waypoint set'
+          : selBuildings.length + ' waypoints set', 60);
+      }
       state.moveIndicators.push({ wx, wy, t: 60 });
       return;
     }
@@ -266,26 +282,48 @@ function onRightClick(ev) {
   if (!myUnits.length) return;
 
   if (target && target.faction !== f) {
-    myUnits.filter(u => u.dmg > 0).forEach(u => orderAttack(u, target));
+    const attackers = myUnits.filter(u => u.dmg > 0);
+    if (state.net?.role === 'client') {
+      if (attackers.length) dispatchCommand({ action: 'attack', ids: attackers.map(u => u.id), targetId: target.id });
+    } else {
+      attackers.forEach(u => orderAttack(u, target));
+    }
   } else if (target?.isBuilding && target.faction === f && target.type === 'refinery') {
-    myUnits.filter(u => u.type === 'harvester').forEach(u => orderHarvest(u, target));
+    const harvesters = myUnits.filter(u => u.type === 'harvester');
+    if (state.net?.role === 'client') {
+      if (harvesters.length) dispatchCommand({ action: 'harvest', ids: harvesters.map(u => u.id), refineryId: target.id });
+    } else {
+      harvesters.forEach(u => orderHarvest(u, target));
+    }
   } else if (getTile(tx, ty) === T.ORE) {
-    for (const u of myUnits) {
-      if (u.type !== 'harvester') continue;
-      u.harvestTile = { x: tx, y: ty };
-      u.state = 'harvest';
-      const ref = nearestRefinery(f, u.x, u.y);
-      if (ref) u.refineryId = ref.id;
-      u.path = astar(u.x, u.y, tx, ty, true);
-      u.mprog = 0;
+    if (state.net?.role === 'client') {
+      const harvesters = myUnits.filter(u => u.type === 'harvester');
+      if (harvesters.length) {
+        const ref = nearestRefinery(f, harvesters[0].x, harvesters[0].y);
+        dispatchCommand({ action: 'harvest', ids: harvesters.map(u => u.id), refineryId: ref?.id });
+      }
+    } else {
+      for (const u of myUnits) {
+        if (u.type !== 'harvester') continue;
+        u.harvestTile = { x: tx, y: ty };
+        u.state = 'harvest';
+        const ref = nearestRefinery(f, u.x, u.y);
+        if (ref) u.refineryId = ref.id;
+        u.path = astar(u.x, u.y, tx, ty, true);
+        u.mprog = 0;
+      }
     }
   } else {
-    const cols = Math.ceil(Math.sqrt(myUnits.length));
-    myUnits.forEach((u, i) => {
-      const offX = (i % cols) - Math.floor(cols / 2);
-      const offY = Math.floor(i / cols) - Math.floor(cols / 2);
-      orderMove(u, tx + offX, ty + offY);
-    });
+    if (state.net?.role === 'client') {
+      if (myUnits.length) dispatchCommand({ action: 'move', ids: myUnits.map(u => u.id), tx, ty });
+    } else {
+      const cols = Math.ceil(Math.sqrt(myUnits.length));
+      myUnits.forEach((u, i) => {
+        const offX = (i % cols) - Math.floor(cols / 2);
+        const offY = Math.floor(i / cols) - Math.floor(cols / 2);
+        orderMove(u, tx + offX, ty + offY);
+      });
+    }
     state.moveIndicators.push({ wx, wy, t: 30 });
   }
 }
@@ -323,22 +361,34 @@ function onKey(ev) {
     updateBuildPanel();
   }
   if (ev.key === 's' || ev.key === 'S') {
-    state.selected.forEach(id => {
-      const u = state.entities.find(e => e.id === id);
-      if (u?.isUnit && u.faction === state.playerFaction) { u.state = 'idle'; u.path = []; u.target = null; }
-    });
+    if (state.net?.role === 'client') {
+      const ids = state.selected.filter(id => {
+        const u = state.entities.find(e => e.id === id);
+        return u?.isUnit && u.faction === state.playerFaction;
+      });
+      if (ids.length) dispatchCommand({ action: 'stop', ids });
+    } else {
+      state.selected.forEach(id => {
+        const u = state.entities.find(e => e.id === id);
+        if (u?.isUnit && u.faction === state.playerFaction) { u.state = 'idle'; u.path = []; u.target = null; }
+      });
+    }
   }
   if (ev.key === 'f' || ev.key === 'F') {
     const mcv = state.entities.find(e => !e.dead && e.isUnit && e.type === 'mcv' &&
       e.faction === state.playerFaction && state.selected.includes(e.id));
     if (mcv) {
-      const b = deployMcvInPlace(mcv);
-      if (b) {
-        state.selected = [b.id];
-        setMsg('MCV deployed — Command Center established', 180);
-        updateBuildPanel();
+      if (state.net?.role === 'client') {
+        dispatchCommand({ action: 'deploy_mcv', unitId: mcv.id });
       } else {
-        setMsg('No space to deploy — move MCV to open ground', 150);
+        const b = deployMcvInPlace(mcv);
+        if (b) {
+          state.selected = [b.id];
+          setMsg('MCV deployed — Command Center established', 180);
+          updateBuildPanel();
+        } else {
+          setMsg('No space to deploy — move MCV to open ground', 150);
+        }
       }
     }
   }
