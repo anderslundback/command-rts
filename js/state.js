@@ -27,6 +27,7 @@ export const state = {
   lastClickEnt: null,
 
   particles: [],
+  shells: [],
   moveIndicators: [],
 
   statusMsg: '',
@@ -50,4 +51,6 @@ export const state = {
   paused: false,
   volume: 0.5,
   factionEliminated: [false, false, false],
+  gameOverDelay: 0,
+  gameStats: { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0 },
 };

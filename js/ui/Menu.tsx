@@ -3,6 +3,12 @@ import { useUIStore } from '../store';
 // @ts-ignore
 import { FDATA } from '../constants.js';
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 interface FactionDef {
   name: string;
   color: string;
@@ -50,6 +56,7 @@ export function Menu(): React.ReactElement {
   const winnerFaction = useUIStore(s => s.winnerFaction);
   const winnerName = useUIStore(s => s.winnerName);
   const playerFaction = useUIStore(s => s.playerFaction);
+  const gameStats = useUIStore(s => s.gameStats);
 
   const handleFactionSelect = (i: number) => {
     // @ts-ignore
@@ -111,24 +118,50 @@ export function Menu(): React.ReactElement {
         <>
           <div
             style={{
-              fontSize: 48,
+              fontSize: 64,
               fontWeight: 'bold',
-              letterSpacing: 8,
-              color: isWin ? '#4d8' : '#f64',
-              textShadow: `0 0 30px ${isWin ? '#4d8' : '#f64'}88`,
+              letterSpacing: 10,
+              color: isWin ? '#4dff88' : '#ff6644',
+              textShadow: `0 0 50px ${isWin ? '#4dff88' : '#ff6644'}`,
+              marginBottom: 4,
             }}
           >
             {isWin ? 'VICTORY' : 'DEFEAT'}
           </div>
 
-          <div style={{ color: '#9ab', fontSize: 14, letterSpacing: 2 }}>
-            {winnerFaction >= 0 ? `${winnerName} wins` : 'All factions destroyed'}
+          <div style={{ color: '#9ab', fontSize: 14, letterSpacing: 3, marginBottom: 28 }}>
+            {winnerFaction >= 0 ? `${winnerName} wins the battle` : 'All factions destroyed'}
+          </div>
+
+          <div style={{ display: 'flex', gap: 2, marginBottom: 32 }}>
+            {[
+              { label: 'DURATION',          value: formatDuration(gameStats.duration) },
+              { label: 'ENEMIES DESTROYED', value: String(gameStats.enemiesKilled)   },
+              { label: 'UNITS LOST',        value: String(gameStats.unitsLost)        },
+            ].map(({ label, value }) => (
+              <div
+                key={label}
+                style={{
+                  background: '#080e18',
+                  border: `1px solid ${isWin ? '#1a3a28' : '#3a1a18'}`,
+                  padding: '16px 24px',
+                  textAlign: 'center',
+                  minWidth: 130,
+                }}
+              >
+                <div style={{ color: '#6a8a9a', fontSize: 9, letterSpacing: 2, marginBottom: 10 }}>
+                  {label}
+                </div>
+                <div style={{ color: '#ddeeff', fontSize: 30, fontWeight: 'bold' }}>
+                  {value}
+                </div>
+              </div>
+            ))}
           </div>
 
           <button
             onClick={handleReturnToMenu}
             style={{
-              marginTop: 16,
               background: '#06080e',
               border: '2px solid #1a2230',
               color: '#8ab',

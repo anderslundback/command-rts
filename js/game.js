@@ -8,6 +8,7 @@ import { orderHarvest } from './orders.js';
 import { updateUnit } from './units.js';
 import { updateBuilding, updateSidebarQueues } from './buildings.js';
 import { updateParticles } from './particles.js';
+import { updateShells } from './shells.js';
 import { makeAI } from './ai.js';
 import { render, renderMinimap } from './renderer.js';
 import { setMsg } from './hud.js';
@@ -20,6 +21,7 @@ export function startGame(pf) {
   state.entities = [];
   state.entById = new Map();
   state.particles = [];
+  state.shells = [];
   state.moveIndicators = [];
   state.tick = 0;
   state.selected = [];
@@ -31,6 +33,8 @@ export function startGame(pf) {
   state.buildReady = false;
   state.primaryBuilding = {};
   state.factionEliminated = [false, false, false];
+  state.gameOverDelay = 0;
+  state.gameStats = { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0 };
   state.paused = false;
   state.credits   = [1000, 2000, 2000];
   state.powerUsed = [0, 0, 0];
@@ -106,20 +110,24 @@ function loop() {
     return;
   }
 
-  if (!state.gameOver && state.gameStarted) {
-    for (let fi = 0; fi < 3; fi++) {
-      if (!state.factionEliminated[fi]) {
-        const hasBuildings = state.entities.some(e => !e.dead && e.isBuilding && e.faction === fi);
-        if (!hasBuildings) {
-          state.factionEliminated[fi] = true;
-          if (fi !== state.playerFaction) {
-            setMsg(FDATA[fi].name + ' eliminated!', 300);
-            speak(FDATA[fi].name + ' eliminated');
+  if (state.gameStarted) {
+    if (!state.gameOver) {
+      for (let fi = 0; fi < 3; fi++) {
+        if (!state.factionEliminated[fi]) {
+          const hasBuildings = state.entities.some(e => !e.dead && e.isBuilding && e.faction === fi);
+          if (!hasBuildings) {
+            state.factionEliminated[fi] = true;
+            if (fi !== state.playerFaction) {
+              setMsg(FDATA[fi].name + ' eliminated!', 300);
+              speak(FDATA[fi].name + ' eliminated');
+            }
           }
         }
       }
+      checkVictory();
+    } else if (state.gameOverDelay > 0) {
+      state.gameOverDelay--;
     }
-    checkVictory();
 
     if (!state.gameOver) {
       for (const e of state.entities) {
@@ -130,13 +138,13 @@ function loop() {
       removeDeadEnts();
       updateSidebarQueues();
       for (let i = 0; i < 3; i++) state.AI[i]?.update();
-      updateParticles();
+      updateShells();
       tickOreRegen();
       if (state.statusTimer > 0) state.statusTimer--;
       let i = state.moveIndicators.length;
       while (i--) { state.moveIndicators[i].t--; if (state.moveIndicators[i].t <= 0) state.moveIndicators.splice(i, 1); }
     }
-
+    updateParticles();
     syncFromGameState();
   }
 
@@ -154,4 +162,7 @@ function checkVictory() {
   if (aliveCount > 1) return;
 
   state.gameOver = true;
+  state.gameOverDelay = 210;
+  state.gameStats.endTick = state.tick;
+  speak(alive[state.playerFaction] ? 'Mission accomplished. Victory!' : 'Mission failed.');
 }

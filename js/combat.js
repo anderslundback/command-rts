@@ -12,7 +12,7 @@ export function dealDmg(e, dmg, attacker) {
   }
   e.hp -= actualDmg;
   e.hitFlash = 8;
-  if (attacker)
+  if (attacker && attacker.px !== undefined)
     spawnMuzzle(attacker.px, attacker.py, FDATA[attacker.faction].color);
   if (e.hp <= 0) {
     e.dead = true;
@@ -23,6 +23,8 @@ export function dealDmg(e, dmg, attacker) {
     spawnExplosion(cx, cy, FDATA[e.faction].color, count);
     spawnExplosion(cx, cy, '#ffaa22', count / 2);
     state.minimapDirty = true;
+    if (e.faction !== state.playerFaction) state.gameStats.enemiesKilled++;
+    else if (e.isUnit) state.gameStats.unitsLost++;
   }
 }
 

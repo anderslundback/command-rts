@@ -6,6 +6,7 @@ import { getEnt } from './entities.js';
 import { astar, adjTile, adjToBuilding, distToEnt } from './pathfinding.js';
 import { nearestRefinery, hasPwr } from './resources.js';
 import { dealDmg, dealSplash, autoAttack } from './combat.js';
+import { spawnShell } from './shells.js';
 import { orderHarvest } from './orders.js';
 import { playShot, playCash } from './audio.js';
 
@@ -62,10 +63,10 @@ export function updateUnit(u) {
         u.path = [];
         if (++u.atimer >= u.aspd) {
           u.atimer = 0;
+          const ttx = (tgt.isBuilding ? tgt.x + tgt.w / 2 : tgt.x) * TS;
+          const tty = (tgt.isBuilding ? tgt.y + tgt.h / 2 : tgt.y) * TS;
           if (u.splash) {
-            const tx = (tgt.isBuilding ? tgt.x + tgt.w / 2 : tgt.x) * TS;
-            const ty = (tgt.isBuilding ? tgt.y + tgt.h / 2 : tgt.y) * TS;
-            dealSplash(tx, ty, u.dmg, u.splash * TS, u);
+            spawnShell(u.px + TS / 2, u.py + TS / 2, ttx, tty, u, u.dmg, u.splash * TS);
           } else {
             dealDmg(tgt, u.dmg, u);
           }
@@ -160,8 +161,11 @@ function updateAirUnit(u) {
       if (dist <= u.range) {
         if (++u.atimer >= u.aspd) {
           u.atimer = 0;
-          if (u.splash) dealSplash(tx, ty, u.dmg, u.splash * TS, u);
-          else dealDmg(tgt, u.dmg, u);
+          if (u.splash) {
+            spawnShell(u.px + TS / 2, u.py + TS / 2 - 12, tx, ty, u, u.dmg, u.splash * TS);
+          } else {
+            dealDmg(tgt, u.dmg, u);
+          }
           const { cam, canvas } = state;
           if (u.px >= cam.x - 300 && u.px <= cam.x + canvas.width + 300 &&
               u.py >= cam.y - 300 && u.py <= cam.y + canvas.height + 300) {

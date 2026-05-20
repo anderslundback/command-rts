@@ -50,11 +50,18 @@ export interface EntUI {
 
 // ── Store shape ──────────────────────────────────────────────────────────────
 
+export interface GameStats {
+  duration: number;
+  enemiesKilled: number;
+  unitsLost: number;
+}
+
 export interface UIState {
   phase: 'menu' | 'playing' | 'paused' | 'gameover';
   playerFaction: number;
   winnerFaction: number;
   winnerName: string;
+  gameStats: GameStats;
   credits: number;
   powerUsed: number;
   powerGen: number;
@@ -80,6 +87,7 @@ const initialState: UIState = {
   playerFaction: 0,
   winnerFaction: -1,
   winnerName: '',
+  gameStats: { duration: 0, enemiesKilled: 0, unitsLost: 0 },
   credits: 0,
   powerUsed: 0,
   powerGen: 0,
@@ -115,12 +123,12 @@ export function syncFromGameState(): void {
     (e: any) => !e.dead && e.isBuilding && e.faction === f && e.done
   );
 
-  // Derive phase
+  // Derive phase — stay 'playing' during the canvas announcement window
   let phase: UIState['phase'] = 'menu';
-  if (s.gameStarted && !s.gameOver) {
-    phase = s.paused ? 'paused' : 'playing';
-  } else if (s.gameOver) {
+  if (s.gameOver && s.gameOverDelay <= 0) {
     phase = 'gameover';
+  } else if (s.gameStarted) {
+    phase = s.paused ? 'paused' : 'playing';
   }
 
   // Derive winner
@@ -168,11 +176,19 @@ export function syncFromGameState(): void {
       items: b.trainQ.map((it: any) => ({ ...it })),
     }));
 
+  const endTick: number = s.gameStats?.endTick || s.tick;
+  const duration: number = Math.floor((endTick - (s.gameStats?.startTick ?? 0)) / 60);
+
   uiStore.setState({
     phase,
     playerFaction: f,
     winnerFaction,
     winnerName,
+    gameStats: {
+      duration,
+      enemiesKilled: s.gameStats?.enemiesKilled ?? 0,
+      unitsLost: s.gameStats?.unitsLost ?? 0,
+    },
     credits: Math.floor(s.credits[f]),
     powerUsed: s.powerUsed[f],
     powerGen: s.powerGen[f],

@@ -12,7 +12,9 @@ export function render() {
   renderBuildings(ctx, VW, VH);
   renderUnits(ctx, VW, VH);
   renderParticles(ctx);
+  renderShells(ctx);
   renderDragBox(ctx);
+  if (state.gameOver && state.gameOverDelay > 0) renderVictoryAnnouncement(ctx, VW, VH);
 }
 
 function renderTiles(ctx, VW, VH) {
@@ -285,6 +287,83 @@ function renderDragBox(ctx) {
   ctx.lineWidth = 1;
   ctx.strokeRect(x+0.5, y+0.5, w-1, h-1);
   ctx.restore();
+}
+
+function renderShells(ctx) {
+  if (!state.shells.length) return;
+  ctx.save();
+  ctx.translate(-state.cam.x, -state.cam.y);
+  for (const sh of state.shells) {
+    if (sh.trail.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(sh.trail[0].x, sh.trail[0].y);
+      for (let i = 1; i < sh.trail.length; i++) ctx.lineTo(sh.trail[i].x, sh.trail[i].y);
+      ctx.lineTo(sh.x, sh.y);
+      ctx.strokeStyle = sh.color;
+      ctx.lineWidth = sh.type === 'artillery' || sh.type === 'gunship' ? 2 : 1.5;
+      ctx.globalAlpha = 0.38;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (sh.type === 'v2rocket' || sh.type === 'tomahawk') {
+      const ang = Math.atan2(sh.ty - sh.y, sh.tx - sh.x);
+      ctx.save();
+      ctx.translate(sh.x, sh.y);
+      ctx.rotate(ang);
+      ctx.fillStyle = sh.color;
+      ctx.fillRect(-sh.r * 1.8, -sh.r * 0.5, sh.r * 3.5, sh.r);
+      ctx.beginPath();
+      ctx.moveTo(sh.r * 1.7, 0); ctx.lineTo(sh.r * 3.2, -sh.r * 0.45); ctx.lineTo(sh.r * 3.2, sh.r * 0.45); ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(sh.x, sh.y, sh.r, 0, Math.PI * 2);
+      ctx.fillStyle = sh.color; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(sh.x, sh.y, sh.r * 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = sh.color; ctx.globalAlpha = 0.16; ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+function renderVictoryAnnouncement(ctx, VW, VH) {
+  const progress = 1 - state.gameOverDelay / 210;
+  const isWin = !state.factionEliminated[state.playerFaction];
+  const color = isWin ? '#4dff88' : '#ff6644';
+
+  ctx.fillStyle = `rgba(0,0,0,${Math.min(0.80, progress * 2.8)})`;
+  ctx.fillRect(0, 0, VW, VH);
+  if (progress < 0.07) return;
+
+  const textAlpha = Math.min(1, (progress - 0.07) * 7);
+  const pulse = 1 + Math.sin(progress * Math.PI * 5) * 0.025 * Math.max(0, 1 - progress * 1.5);
+
+  ctx.save();
+  ctx.translate(VW / 2, VH / 2 - 20);
+  ctx.scale(pulse, pulse);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 88px monospace';
+  ctx.globalAlpha = textAlpha;
+  ctx.fillStyle = color;
+  ctx.shadowColor = color; ctx.shadowBlur = 50;
+  ctx.fillText(isWin ? 'VICTORY' : 'DEFEAT', 0, 0);
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  if (progress > 0.38) {
+    const subAlpha = Math.min(1, (progress - 0.38) * 5) * textAlpha;
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '16px monospace';
+    ctx.fillStyle = `rgba(180,205,225,${subAlpha})`;
+    ctx.fillText(
+      isWin ? FDATA[state.playerFaction].name + ' wins the battle' : 'All structures destroyed',
+      VW / 2, VH / 2 + 36
+    );
+    ctx.restore();
+  }
 }
 
 export function renderMinimap() {
