@@ -49,6 +49,7 @@ export const state = {
   fpsLastTime: 0,
   fpsSmooth: 60,
   paused: false,
+  gameSpeed: 2, // 0=slowest 1=slow 2=normal 3=fast 4=fastest
   volume: 0.5,
   factionEliminated: [false, false, false],
   gameOverDelay: 0,

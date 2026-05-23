@@ -3,6 +3,8 @@ import { useUIStore } from '../store';
 // @ts-ignore
 import { FDATA } from '../constants.js';
 
+const SPEED_LABELS = ['SLOWEST', 'SLOW', 'NORMAL', 'FAST', 'FASTEST'];
+
 export function HUD(): React.ReactElement {
   const playerFaction = useUIStore(s => s.playerFaction);
   const credits = useUIStore(s => s.credits);
@@ -10,6 +12,7 @@ export function HUD(): React.ReactElement {
   const powerGen = useUIStore(s => s.powerGen);
   const statusMsg = useUIStore(s => s.statusMsg);
   const fps = useUIStore(s => s.fps);
+  const gameSpeed = useUIStore(s => s.gameSpeed);
   const netState = useUIStore(s => s.net);
   const lobby = useUIStore(s => s.lobby);
 
@@ -82,6 +85,11 @@ export function HUD(): React.ReactElement {
 
       <div style={{ flex: 1 }} />
 
+      {/* Game speed control — skirmish always, multiplayer host only */}
+      {(netState.role === 'none' || lobby?.isHost) && (
+        <SpeedControl speed={gameSpeed} />
+      )}
+
       {/* Net indicator */}
       {netState.role !== 'none' && (
         <span style={{ color: '#3a5060', fontSize: 10, letterSpacing: 1 }}>
@@ -91,6 +99,60 @@ export function HUD(): React.ReactElement {
 
       {/* FPS counter */}
       <span style={{ color: '#445', fontSize: 10 }}>{fps} FPS</span>
+    </div>
+  );
+}
+
+function SpeedControl({ speed }: { speed: number }): React.ReactElement {
+  const handleDec = () => {
+    import('../game.js').then((m: any) => m.setGameSpeed(speed - 1)).catch(console.error);
+  };
+  const handleInc = () => {
+    import('../game.js').then((m: any) => m.setGameSpeed(speed + 1)).catch(console.error);
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        userSelect: 'none',
+      }}
+    >
+      <button
+        onClick={handleDec}
+        disabled={speed <= 0}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: speed <= 0 ? '#2a3040' : '#668',
+          cursor: speed <= 0 ? 'default' : 'pointer',
+          fontSize: 10,
+          padding: '0 2px',
+          lineHeight: 1,
+        }}
+      >
+        ◄
+      </button>
+      <span style={{ color: '#557', fontSize: 10, letterSpacing: 1, minWidth: 52, textAlign: 'center' }}>
+        {SPEED_LABELS[speed]}
+      </span>
+      <button
+        onClick={handleInc}
+        disabled={speed >= 4}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: speed >= 4 ? '#2a3040' : '#668',
+          cursor: speed >= 4 ? 'default' : 'pointer',
+          fontSize: 10,
+          padding: '0 2px',
+          lineHeight: 1,
+        }}
+      >
+        ►
+      </button>
     </div>
   );
 }

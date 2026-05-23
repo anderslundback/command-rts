@@ -23,6 +23,7 @@ export function saveSnapshot() {
     oreHistory: new Set(state.oreHistory),
     statusMsg: state.statusMsg,
     statusTimer: state.statusTimer,
+    gameSpeed: state.gameSpeed,
   };
 }
 
@@ -54,6 +55,7 @@ export function restoreSnapshot(snap) {
   state.oreHistory = new Set(snap.oreHistory);
   state.statusMsg = snap.statusMsg;
   state.statusTimer = snap.statusTimer;
+  state.gameSpeed = snap.gameSpeed ?? 2;
 }
 
 function restoreEnt(s) {

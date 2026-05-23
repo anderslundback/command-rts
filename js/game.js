@@ -99,9 +99,23 @@ export function togglePause() {
   syncFromGameState();
 }
 
+export function setGameSpeed(index) {
+  if (!state.gameStarted) return;
+  const clamped = Math.max(0, Math.min(4, index));
+  if (state.net) {
+    // In multiplayer, route through the rollback input system so all players sync
+    import('./net/netClient.js').then(m => m.scheduleInput({ action: 'set_speed', speed: clamped }));
+  } else {
+    state.gameSpeed = clamped;
+    _accumulator = 0;
+    syncFromGameState();
+  }
+}
+
 // ── Game loop ─────────────────────────────────────────────────────────────────
 
-const TICK_MS = 50; // 20 Hz fixed simulation rate
+// ms per simulation tick per speed level: slowest→fastest
+export const TICK_MS_TABLE = [125, 83, 50, 33, 25];
 let _accumulator = 0;
 let _lastLoopTime = 0;
 
@@ -122,11 +136,12 @@ function loop() {
   // Accumulator-based fixed-rate simulation (all players: skirmish + multiplayer).
   // Caps dt at 200ms to prevent spiral-of-death on tab focus restore.
   if (state.gameStarted) {
+    const tickMs = TICK_MS_TABLE[state.gameSpeed ?? 2];
     const dt = _lastLoopTime > 0 ? Math.min(now - _lastLoopTime, 200) : 0;
     _accumulator += dt;
-    while (_accumulator >= TICK_MS) {
+    while (_accumulator >= tickMs) {
       gameTick();
-      _accumulator -= TICK_MS;
+      _accumulator -= tickMs;
     }
   }
   _lastLoopTime = now;
@@ -135,7 +150,8 @@ function loop() {
   if (state.gameStarted) syncFromGameState();
 
   // Lerp unit positions between ticks for smooth 60fps rendering.
-  const alpha = state.gameStarted ? _accumulator / TICK_MS : 0;
+  const tickMsAlpha = TICK_MS_TABLE[state.gameSpeed ?? 2];
+  const alpha = state.gameStarted ? _accumulator / tickMsAlpha : 0;
   _applyRenderAlpha(alpha);
   render();
   renderMinimap();
@@ -266,6 +282,7 @@ function _resetGameState(playerFaction, startCredits) {
   state.gameOverDelay = 0;
   state.gameStats = { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0, powerHistory: [] };
   state.paused = false;
+  state.gameSpeed = 2;
   state.credits   = [...startCredits];
   state.powerUsed = [0, 0, 0];
   state.powerGen  = [0, 0, 0];

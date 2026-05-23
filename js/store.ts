@@ -101,6 +101,7 @@ export interface UIState {
   powerGen: number;
   statusMsg: string;
   fps: number;
+  gameSpeed: number;
   activeTab: 'build' | 'train';
   buildMode: string | null;
   buildReady: boolean;
@@ -130,6 +131,7 @@ const initialState: UIState = {
   powerGen: 0,
   statusMsg: '',
   fps: 60,
+  gameSpeed: 2,
   activeTab: 'build',
   buildMode: null,
   buildReady: false,
@@ -235,6 +237,7 @@ export function syncFromGameState(): void {
     powerGen: s.powerGen[f],
     statusMsg: s.statusTimer > 0 ? s.statusMsg : '',
     fps: Math.round(s.fpsSmooth),
+    gameSpeed: s.gameSpeed ?? 2,
     activeTab: s.activeTab as 'build' | 'train',
     buildMode: s.buildMode,
     buildReady: s.buildReady,

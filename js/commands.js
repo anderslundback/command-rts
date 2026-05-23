@@ -81,5 +81,8 @@ export function applyCommand(cmd) {
     case 'set_primary':
       state.primaryBuilding[cmd.btype] = cmd.entId;
       break;
+    case 'set_speed':
+      state.gameSpeed = Math.max(0, Math.min(4, cmd.speed));
+      break;
   }
 }
