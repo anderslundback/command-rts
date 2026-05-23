@@ -1057,17 +1057,21 @@ function renderFog(ctx, VW, VH) {
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
   ctx.fillStyle = '#000';
+  ctx.beginPath();
   for (let ty = tsy; ty < tey; ty++)
     for (let tx = tsx; tx < tex; tx++)
       if (!state.fog.explored[ty * MW + tx])
-        ctx.fillRect(tx * TS, ty * TS, TS, TS);
-  ctx.globalAlpha = 0.62; ctx.fillStyle = '#000';
+        ctx.rect(tx * TS, ty * TS, TS, TS);
+  ctx.fill();
+  ctx.globalAlpha = 0.62;
+  ctx.beginPath();
   for (let ty = tsy; ty < tey; ty++)
     for (let tx = tsx; tx < tex; tx++) {
       const idx = ty * MW + tx;
       if (state.fog.explored[idx] && !state.fog.visible[idx])
-        ctx.fillRect(tx * TS, ty * TS, TS, TS);
+        ctx.rect(tx * TS, ty * TS, TS, TS);
     }
+  ctx.fill();
   ctx.globalAlpha = 1;
   ctx.restore();
 }

@@ -172,6 +172,7 @@ export function applySnapshot(snap) {
   // state.selected is an array of entity IDs — prune any that no longer exist.
   const liveIds = new Set(snap.entities.map(s => s.id));
   state.selected = state.selected.filter(id => liveIds.has(id));
+  updateFog();
 }
 
 function deserializeBuilding(s) {
@@ -359,8 +360,9 @@ function loop() {
         if (e.hitFlash > 0) e.hitFlash--;
       }
       updateShells();
+      let mi = state.moveIndicators.length;
+      while (mi--) { state.moveIndicators[mi].t--; if (state.moveIndicators[mi].t <= 0) state.moveIndicators.splice(mi, 1); }
     }
-    updateFog();
     updateParticles();
     syncFromGameState();
     render();
