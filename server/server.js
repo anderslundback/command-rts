@@ -3,8 +3,6 @@ import { WebSocketServer } from 'ws';
 const PORT = process.env.PORT ?? 3001;
 const wss = new WebSocketServer({ port: PORT });
 
-// Prune connections that dropped without a clean close (mobile, bad networks).
-// Uses the ws protocol-level ping/pong, separate from our JSON ping/pong.
 const heartbeat = setInterval(() => {
   for (const ws of wss.clients) {
     if (!ws.isAlive) { ws.terminate(); continue; }
@@ -14,7 +12,7 @@ const heartbeat = setInterval(() => {
 }, 15_000);
 wss.on('close', () => clearInterval(heartbeat));
 
-// code → { hostWs, slots: Map<slot→ws>, players: PlayerEntry[] }
+// code → { hostWs, slots: Map<slot→ws>, players: PlayerEntry[], gameStarted }
 const rooms = new Map();
 // ws → { code, slot }
 const clients = new Map();
@@ -42,7 +40,17 @@ function lobbyUpdate(room) {
 }
 
 function makeAiPlayer(slot, faction) {
-  return { slot, name: `AI`, faction, ready: true, isHost: false, isAI: true, latencyMs: 0 };
+  return { slot, name: 'AI', faction, ready: true, isHost: false, isAI: true, isEmpty: false, latencyMs: 0 };
+}
+
+function makeEmptySlot(slot) {
+  return { slot, name: '—', faction: null, ready: true, isHost: false, isAI: false, isEmpty: true, latencyMs: 0 };
+}
+
+function pickFreeFaction(players, excludeSlot) {
+  const taken = new Set(players.filter((p, i) => i !== excludeSlot && !p.isEmpty).map(p => p.faction));
+  for (let f = 0; f < 3; f++) if (!taken.has(f)) return f;
+  return 0;
 }
 
 wss.on('connection', ws => {
@@ -58,11 +66,12 @@ wss.on('connection', ws => {
     switch (msg.type) {
       case 'create_room': {
         const code = genCode();
-        const player = { slot: 0, name: msg.name || 'Player 1', faction: 0, ready: false, isHost: true, isAI: false, latencyMs: 0 };
+        const player = { slot: 0, name: msg.name || 'Player 1', faction: 0, ready: false, isHost: true, isAI: false, isEmpty: false, latencyMs: 0 };
         const room = {
           hostWs: ws,
           slots: new Map([[0, ws]]),
           players: [player, makeAiPlayer(1, 1), makeAiPlayer(2, 2)],
+          gameStarted: false,
         };
         rooms.set(code, room);
         clients.set(ws, { code, slot: 0 });
@@ -74,14 +83,16 @@ wss.on('connection', ws => {
         const code = msg.code?.toUpperCase();
         const room = rooms.get(code);
         if (!room) { send(ws, { type: 'error', reason: 'room_not_found' }); return; }
-        // Find first AI slot to replace
+        if (room.gameStarted) { send(ws, { type: 'error', reason: 'game_in_progress' }); return; }
+        // Only replace AI slots — empty slots (intentionally removed) stay empty
         let slot = -1;
         for (const p of room.players) {
           if (p.isAI) { slot = p.slot; break; }
         }
         if (slot === -1) { send(ws, { type: 'error', reason: 'room_full' }); return; }
 
-        const player = { slot, name: msg.name || `Player ${slot + 1}`, faction: slot, ready: false, isHost: false, isAI: false, latencyMs: 0 };
+        const faction = pickFreeFaction(room.players, slot);
+        const player = { slot, name: msg.name || `Player ${slot + 1}`, faction, ready: false, isHost: false, isAI: false, isEmpty: false, latencyMs: 0 };
         room.players[slot] = player;
         room.slots.set(slot, ws);
         clients.set(ws, { code, slot });
@@ -104,18 +115,55 @@ wss.on('connection', ws => {
         if (!meta) return;
         const room = rooms.get(meta.code);
         if (!room) return;
+        if (room.players.some((p, i) => i !== meta.slot && !p.isEmpty && p.faction === msg.faction)) {
+          send(ws, { type: 'error', reason: 'faction_taken' }); return;
+        }
         room.players[meta.slot].faction = msg.faction;
         lobbyUpdate(room);
         break;
       }
 
       case 'lobby_ai_faction': {
-        // Host changes an AI slot's faction
         if (!meta) return;
         const room = rooms.get(meta.code);
         if (!room || room.hostWs !== ws) return;
         const p = room.players[msg.slot];
-        if (p?.isAI) { p.faction = msg.faction; lobbyUpdate(room); }
+        if (!p?.isAI) return;
+        if (room.players.some((q, i) => i !== msg.slot && !q.isEmpty && q.faction === msg.faction)) {
+          send(ws, { type: 'error', reason: 'faction_taken' }); return;
+        }
+        p.faction = msg.faction;
+        lobbyUpdate(room);
+        break;
+      }
+
+      case 'lobby_remove_slot': {
+        // Host removes an AI slot (makes it empty) or kicks a human player
+        if (!meta) return;
+        const room = rooms.get(meta.code);
+        if (!room || room.hostWs !== ws) return;
+        const p = room.players[msg.slot];
+        if (!p || p.isHost || p.isEmpty) return;
+        if (!p.isAI) {
+          const kickWs = room.slots.get(msg.slot);
+          if (kickWs) { send(kickWs, { type: 'kicked' }); kickWs.close(); }
+          room.slots.delete(msg.slot);
+        }
+        room.players[msg.slot] = makeEmptySlot(msg.slot);
+        lobbyUpdate(room);
+        break;
+      }
+
+      case 'lobby_add_ai': {
+        // Host restores an empty slot as AI
+        if (!meta) return;
+        const room = rooms.get(meta.code);
+        if (!room || room.hostWs !== ws) return;
+        const p = room.players[msg.slot];
+        if (!p?.isEmpty) return;
+        const faction = pickFreeFaction(room.players, msg.slot);
+        room.players[msg.slot] = makeAiPlayer(msg.slot, faction);
+        lobbyUpdate(room);
         break;
       }
 
@@ -132,20 +180,24 @@ wss.on('connection', ws => {
         if (!meta) return;
         const room = rooms.get(meta.code);
         if (!room || room.hostWs !== ws) return;
-        const humanPlayers = room.players.filter(p => !p.isAI);
+        const humanPlayers = room.players.filter(p => !p.isAI && !p.isEmpty);
         const allReady = humanPlayers.filter(p => !p.isHost).every(p => p.ready);
         if (!allReady) { send(ws, { type: 'error', reason: 'not_all_ready' }); return; }
-
+        // Validate unique factions among active slots
+        const active = room.players.filter(p => !p.isEmpty);
+        const factions = active.map(p => p.faction);
+        if (new Set(factions).size !== factions.length) {
+          send(ws, { type: 'error', reason: 'duplicate_factions' }); return;
+        }
         const mapSeed = (Math.random() * 0xffffffff) >>> 0;
-        const slotFactions = room.players.map(p => p.faction);
-        const aiSlots = room.players.map(p => p.isAI);
-
+        const slotFactions = room.players.map(p => p.isEmpty ? null : p.faction);
+        const aiSlots = room.players.map(p => !p.isEmpty && p.isAI);
         broadcast(room, { type: 'game_start', mapSeed, slotFactions, aiSlots });
+        room.gameStarted = true;
         break;
       }
 
       case 'cmd': {
-        // Client → relay to host
         if (!meta) return;
         const room = rooms.get(meta.code);
         if (!room) return;
@@ -154,7 +206,6 @@ wss.on('connection', ws => {
       }
 
       case 'snapshot': {
-        // Host → relay to all clients (strip type, re-wrap)
         if (!meta) return;
         const room = rooms.get(meta.code);
         if (!room || room.hostWs !== ws) return;
@@ -179,15 +230,20 @@ wss.on('connection', ws => {
     if (!room) return;
 
     if (room.hostWs === ws) {
-      // Host left — tear down room
       broadcast(room, { type: 'error', reason: 'host_disconnected' });
       rooms.delete(meta.code);
     } else {
-      // Replace departing human with AI
       const slot = meta.slot;
+      const name = room.players[slot]?.name ?? 'Player';
       room.slots.delete(slot);
-      room.players[slot] = makeAiPlayer(slot, room.players[slot].faction);
-      lobbyUpdate(room);
+      if (room.gameStarted) {
+        // Notify remaining players; host will assign AI to the departed faction
+        broadcast(room, { type: 'player_left', slot, name });
+      } else {
+        // In lobby: replace with AI
+        room.players[slot] = makeAiPlayer(slot, room.players[slot]?.faction ?? slot);
+        lobbyUpdate(room);
+      }
     }
   });
 });

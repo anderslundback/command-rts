@@ -88,13 +88,22 @@ net.on('game_start', msg => {
     phase: 'playing',
     net: { ...st.net, connected: true, role },
   }));
-  _cb.startNetGame?.(msg.mapSeed, myFaction, role, msg.aiSlots);
+  _cb.startNetGame?.(msg.mapSeed, lobby.mySlot, myFaction, role, msg.aiSlots, msg.slotFactions);
+});
+
+// Player left during game — notify and hand their faction to AI on host
+net.on('player_left', msg => _cb.onPlayerLeft?.(msg));
+
+// Kicked from lobby by host
+net.on('kicked', () => {
+  uiStore.setState({ phase: 'menu', lobby: null, net: { connected: false, role: 'none', latencyMs: 0 }, bootMsg: 'You were removed from the lobby.' });
+  net.disconnect();
 });
 
 // Host disconnected — return all clients to menu
 net.on('error', msg => {
   if (msg.reason === 'host_disconnected') {
-    uiStore.setState({ phase: 'menu', lobby: null, net: { connected: false, role: 'none', latencyMs: 0 } });
+    uiStore.setState({ phase: 'menu', lobby: null, net: { connected: false, role: 'none', latencyMs: 0 }, bootMsg: 'The host disconnected.' });
     net.disconnect();
     _cb.showMenu?.();
   }

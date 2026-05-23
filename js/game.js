@@ -29,7 +29,7 @@ export function startGame(pf) {
   _populateOreHistory();
   state.AI = [null, null, null];
   for (let i = 0; i < 3; i++) if (i !== pf) state.AI[i] = makeAI(i);
-  _placeStartingEntities();
+  _placeStartingEntities([0, 1, 2]);
   calcPower();
   initFog();
   updateFog();
@@ -42,8 +42,8 @@ export function startGame(pf) {
 
 // ── Multiplayer host/client entry ────────────────────────────────────────────
 
-export function startNetGame(mapSeed, myFaction, role, aiSlots) {
-  state.net = { role, myFaction, commandQueue: [], snapshotTick: 0 };
+export function startNetGame(mapSeed, mySlot, myFaction, role, aiSlots, slotFactions) {
+  state.net = { role, myFaction, commandQueue: [], snapshotTick: 0, slotFactions };
   _resetGameState(myFaction, [1000, 2000, 2000]);
 
   genMapFromSeed(mapSeed);
@@ -51,8 +51,15 @@ export function startNetGame(mapSeed, myFaction, role, aiSlots) {
   state.AI = [null, null, null];
 
   if (role === 'host') {
-    for (let i = 0; i < 3; i++) if (aiSlots[i]) state.AI[i] = makeAI(i);
-    _placeStartingEntities();
+    // Create AI for each AI slot, keyed by the chosen faction for that slot
+    for (let i = 0; i < 3; i++) {
+      if (aiSlots[i] && slotFactions[i] != null) state.AI[slotFactions[i]] = makeAI(slotFactions[i]);
+    }
+    _placeStartingEntities(slotFactions);
+    // Pre-mark unused faction indices (no slot mapped to them) as eliminated
+    for (let f = 0; f < 3; f++) {
+      if (!slotFactions.includes(f)) state.factionEliminated[f] = true;
+    }
     calcPower();
     initFog();
     updateFog();
@@ -67,7 +74,7 @@ export function startNetGame(mapSeed, myFaction, role, aiSlots) {
     initFog();
   }
 
-  _centerCamOn(myFaction);
+  _centerCamOn(mySlot);
   syncFromGameState();
   if (state.frameId) { cancelAnimationFrame(state.frameId); clearTimeout(state.frameId); }
   loop();
@@ -96,6 +103,9 @@ function serializeEnt(e) {
     if (e.refineryId != null) s.refineryId = e.refineryId;
     if (e.destPx != null)   s.destPx = e.destPx;
     if (e.destPy != null)   s.destPy = e.destPy;
+    // Send actual pixel position so clients can interpolate smoothly
+    s.px = Math.round(e.px);
+    s.py = Math.round(e.py);
   }
   return s;
 }
@@ -122,6 +132,12 @@ function broadcastSnapshot() {
 export function applySnapshot(snap) {
   if (state.net?.role !== 'client') return;
 
+  // Capture current visual positions before replacing entities
+  const prevPos = new Map();
+  for (const e of state.entities) {
+    if (!e.dead && e.isUnit) prevPos.set(e.id, { px: e.px, py: e.py });
+  }
+
   state.tick          = snap.tick;
   state.credits       = snap.credits;
   state.powerUsed     = snap.powerUsed;
@@ -136,9 +152,22 @@ export function applySnapshot(snap) {
 
   const selectedIds = new Set(state.selected.map(e => e.id));
   state.entById.clear();
+  const snapAt = performance.now();
   state.entities = snap.entities.map(s => {
     const e = s.b ? deserializeBuilding(s) : deserializeUnit(s);
     state.entById.set(e.id, e);
+    if (!s.b) {
+      // Set up smooth interpolation: slide from where the unit visually was
+      // to where the host says it is now, over the snapshot interval (~100ms).
+      const prev = prevPos.get(s.id);
+      e._toPx   = s.px ?? s.x * TS;
+      e._toPy   = s.py ?? s.y * TS;
+      e._prevPx = prev ? prev.px : e._toPx;
+      e._prevPy = prev ? prev.py : e._toPy;
+      e._snapAt = snapAt;
+      e.px = e._prevPx;
+      e.py = e._prevPy;
+    }
     return e;
   });
   // Reconcile selection: restore by id so 100ms snapshots don't clear UI selection.
@@ -314,15 +343,21 @@ function loop() {
 
   state.tick++;
 
-  // Client-only: run local unit simulation for smooth movement between snapshots.
-  // Snapshots from the host override positions at ~10Hz; local sim fills the gaps.
+  // Client-only: interpolate unit positions between 10Hz snapshots for smooth rendering.
   if (state.net?.role === 'client') {
     if (state.gameStarted && !state.gameOver) {
+      const now = performance.now();
       for (const e of state.entities) {
         if (e.dead) continue;
-        if (e.isUnit) updateUnit(e);
+        if (e.isUnit && e._snapAt != null) {
+          // Linear interpolation toward the host-authoritative position over 110ms
+          // (slightly past the 100ms snapshot interval to avoid stalling at the end)
+          const t = Math.min((now - e._snapAt) / 110, 1);
+          e.px = e._prevPx + (e._toPx - e._prevPx) * t;
+          e.py = e._prevPy + (e._toPy - e._prevPy) * t;
+        }
+        if (e.hitFlash > 0) e.hitFlash--;
       }
-      removeDeadEnts();
       updateShells();
     }
     updateFog();
@@ -435,10 +470,13 @@ function _populateOreHistory() {
       if (state.map[ty][tx] === T.ORE) state.oreHistory.add(ty * 80 + tx);
 }
 
-function _placeStartingEntities() {
+// slotFactions[slot] = faction index (or null for empty slots)
+function _placeStartingEntities(slotFactions) {
   const starts = startPositions();
-  for (let f = 0; f < 3; f++) {
-    const [sx, sy] = starts[f];
+  for (let slot = 0; slot < 3; slot++) {
+    const f = slotFactions[slot];
+    if (f == null) continue;
+    const [sx, sy] = starts[slot];
     placeBuilding(f, 'command',  sx,   sy,   true);
     placeBuilding(f, 'power',    sx+4, sy,   true);
     const ref = placeBuilding(f, 'refinery', sx, sy+4, true);
@@ -450,8 +488,8 @@ function _placeStartingEntities() {
   }
 }
 
-function _centerCamOn(faction) {
-  const [px, py] = startPositions()[faction];
+function _centerCamOn(slot) {
+  const [px, py] = startPositions()[slot];
   state.cam.x = px * TS - state.canvas.width  / 2;
   state.cam.y = py * TS - state.canvas.height / 2;
   clampCam();
@@ -490,4 +528,12 @@ registerGameCallbacks({
   startNetGame,
   showMenu: () => showMenu(),
   onCmd: (msg) => { if (state.net?.role === 'host') state.net.commandQueue.push(msg); },
+  onPlayerLeft: (msg) => {
+    setMsg(`${msg.name} has left the game`, 300);
+    // Host: hand the departed faction to AI so their units keep fighting
+    if (state.net?.role === 'host') {
+      const faction = state.net.slotFactions?.[msg.slot];
+      if (faction != null && !state.AI[faction]) state.AI[faction] = makeAI(faction);
+    }
+  },
 });

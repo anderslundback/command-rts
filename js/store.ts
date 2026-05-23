@@ -53,10 +53,11 @@ export interface EntUI {
 export interface PlayerEntry {
   slot: number;
   name: string;
-  faction: number;
+  faction: number | null;
   ready: boolean;
   isHost: boolean;
   isAI: boolean;
+  isEmpty: boolean;
   latencyMs: number;
 }
 
@@ -113,6 +114,7 @@ export interface UIState {
   primaryBuilding: Record<string, number>;
   lobby: LobbyState | null;
   net: NetState;
+  bootMsg: string;
 }
 
 // ── Initial state ────────────────────────────────────────────────────────────
@@ -141,6 +143,7 @@ const initialState: UIState = {
   primaryBuilding: {},
   lobby: null,
   net: { connected: false, role: 'none', latencyMs: 0 },
+  bootMsg: '',
 };
 
 // ── Zustand vanilla store ────────────────────────────────────────────────────

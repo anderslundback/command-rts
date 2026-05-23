@@ -144,6 +144,7 @@ export function Menu(): React.ReactElement {
   const playerFaction = useUIStore(s => s.playerFaction);
   const gameStats = useUIStore(s => s.gameStats);
 
+  const bootMsg = useUIStore(s => s.bootMsg);
   const [subPhase, setSubPhase] = React.useState<'main' | 'skirmish' | 'join'>('main');
   const [joinCode, setJoinCode] = React.useState('');
   const [playerName, setPlayerName] = React.useState('');
@@ -259,6 +260,12 @@ export function Menu(): React.ReactElement {
           >
             COMMAND
           </div>
+
+          {bootMsg && (
+            <div style={{ color: '#f64', fontSize: 11, letterSpacing: 1, padding: '6px 12px', background: '#1a0808', border: '1px solid #3a1818' }}>
+              {bootMsg}
+            </div>
+          )}
 
           {/* Name input (shared) */}
           {(subPhase === 'main' || subPhase === 'join') && (

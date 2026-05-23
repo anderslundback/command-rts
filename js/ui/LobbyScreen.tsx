@@ -7,9 +7,39 @@ import { net } from '../net/netClient.js';
 
 const FACTION_NAMES = (FDATA as any[]).map((f: any) => f.name);
 
-function PlayerRow({ player, mySlot, isHost }: { player: PlayerEntry; mySlot: number; isHost: boolean }) {
+function PlayerRow({
+  player, mySlot, isHost, takenFactions,
+}: {
+  player: PlayerEntry;
+  mySlot: number;
+  isHost: boolean;
+  takenFactions: Set<number>;
+}) {
+  const [kickPending, setKickPending] = React.useState(false);
   const isMe = player.slot === mySlot;
-  const canEditFaction = isMe || (isHost && player.isAI);
+  const canEditFaction = !player.isEmpty && (isMe || (isHost && player.isAI));
+
+  if (player.isEmpty) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #0e1e2e' }}>
+        <span style={{ color: '#446', fontSize: 10, width: 20, textAlign: 'right' }}>{player.slot}</span>
+        <span style={{ flex: 1, color: '#223040', fontSize: 12, letterSpacing: 1, fontStyle: 'italic' }}>empty slot</span>
+        <span style={{ width: 60 }} />
+        {isHost && (
+          <button
+            onClick={() => net.send({ type: 'lobby_add_ai', slot: player.slot })}
+            style={{
+              background: '#060d14', border: '1px solid #1a3020', color: '#3a7a50',
+              fontFamily: "'Courier New', monospace", fontSize: 9, letterSpacing: 1,
+              padding: '2px 6px', cursor: 'pointer',
+            }}
+          >
+            + AI
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #0e1e2e' }}>
@@ -20,7 +50,7 @@ function PlayerRow({ player, mySlot, isHost }: { player: PlayerEntry; mySlot: nu
         {player.isHost && !player.isAI && <span style={{ color: '#668', marginLeft: 6 }}>HOST</span>}
       </span>
       <select
-        value={player.faction}
+        value={player.faction ?? 0}
         disabled={!canEditFaction}
         onChange={e => {
           const faction = Number(e.target.value);
@@ -37,7 +67,9 @@ function PlayerRow({ player, mySlot, isHost }: { player: PlayerEntry; mySlot: nu
         }}
       >
         {FACTION_NAMES.map((name: string, i: number) => (
-          <option key={i} value={i}>{name}</option>
+          <option key={i} value={i} disabled={takenFactions.has(i) && i !== player.faction}>
+            {name}{takenFactions.has(i) && i !== player.faction ? ' ✕' : ''}
+          </option>
         ))}
       </select>
       <span style={{ width: 60, textAlign: 'center', fontSize: 10 }}>
@@ -48,13 +80,40 @@ function PlayerRow({ player, mySlot, isHost }: { player: PlayerEntry; mySlot: nu
           : <span style={{ color: '#668' }}>○ waiting</span>
         }
       </span>
+      {isHost && !player.isHost && (
+        kickPending ? (
+          <div style={{ display: 'flex', gap: 3 }}>
+            <button
+              onClick={() => { net.send({ type: 'lobby_remove_slot', slot: player.slot }); setKickPending(false); }}
+              style={{ background: '#3a0808', border: '1px solid #c44', color: '#f66', fontFamily: "'Courier New', monospace", fontSize: 9, padding: '2px 5px', cursor: 'pointer' }}
+            >confirm</button>
+            <button
+              onClick={() => setKickPending(false)}
+              style={{ background: '#060d14', border: '1px solid #1a2230', color: '#446', fontFamily: "'Courier New', monospace", fontSize: 9, padding: '2px 5px', cursor: 'pointer' }}
+            >cancel</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setKickPending(true)}
+            style={{
+              background: '#060d14', border: '1px solid #3a1818', color: '#644',
+              fontFamily: "'Courier New', monospace", fontSize: 9, letterSpacing: 1,
+              padding: '2px 6px', cursor: 'pointer',
+            }}
+          >
+            {player.isAI ? '✕' : 'kick'}
+          </button>
+        )
+      )}
     </div>
   );
 }
 
 export function LobbyScreen(): React.ReactElement {
   const lobby = useUIStore(s => s.lobby);
+  const bootMsg = useUIStore(s => s.bootMsg);
   const [chatInput, setChatInput] = React.useState('');
+  const [netError, setNetError] = React.useState('');
   const chatRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -75,15 +134,26 @@ export function LobbyScreen(): React.ReactElement {
     const onDisconnect = () => {
       uiStore.setState({ phase: 'menu', lobby: null, net: { connected: false, role: 'none', latencyMs: 0 } });
     };
+    const onError = (msg: any) => {
+      if (msg.reason === 'faction_taken') setNetError('That faction is already taken.');
+      else if (msg.reason === 'duplicate_factions') setNetError('All players must have unique factions before starting.');
+    };
 
     net.on('lobby_update', onLobbyUpdate);
     net.on('chat_msg', onChatMsg);
     net.on('_disconnect', onDisconnect);
+    net.on('error', onError);
     return () => {
       net.off('lobby_update', onLobbyUpdate);
       net.off('chat_msg', onChatMsg);
       net.off('_disconnect', onDisconnect);
+      net.off('error', onError);
     };
+  }, [!!lobby]);
+
+  // Clear bootMsg once the lobby is shown
+  React.useEffect(() => {
+    if (lobby && bootMsg) uiStore.setState({ bootMsg: '' });
   }, [!!lobby]);
 
   React.useEffect(() => {
@@ -93,13 +163,17 @@ export function LobbyScreen(): React.ReactElement {
   if (!lobby) return <></>;
 
   const { roomCode, players, chatMessages, mySlot, isHost } = lobby;
-  const humanPlayers = players.filter(p => !p.isAI);
+  const humanPlayers = players.filter(p => !p.isAI && !p.isEmpty);
   const allGuestsReady = humanPlayers.filter(p => !p.isHost).every(p => p.ready);
   const myPlayer = players[mySlot];
   const amReady = myPlayer?.ready ?? false;
 
+  // Faction indices already chosen by other active players (for greying out options)
+  const takenByOthers = (excludeSlot: number) =>
+    new Set(players.filter(p => p.slot !== excludeSlot && !p.isEmpty && p.faction != null).map(p => p.faction as number));
+
   const handleReady = () => net.send({ type: 'lobby_ready', ready: !amReady });
-  const handleStart = () => net.send({ type: 'start_game' });
+  const handleStart = () => { setNetError(''); net.send({ type: 'start_game' }); };
 
   const handleLeave = () => {
     net.disconnect();
@@ -145,13 +219,25 @@ export function LobbyScreen(): React.ReactElement {
 
         <div style={{ display: 'flex', gap: 16 }}>
           {/* Left: players + controls */}
-          <div style={{ flex: '0 0 280px' }}>
+          <div style={{ flex: '0 0 310px' }}>
             <div style={{ color: '#446', fontSize: 9, letterSpacing: 2, marginBottom: 6 }}>PLAYERS</div>
             <div style={{ border: '1px solid #0e1e2e', padding: '4px 8px', marginBottom: 12, background: '#06080e' }}>
               {players.map(p => (
-                <PlayerRow key={p.slot} player={p} mySlot={mySlot} isHost={isHost} />
+                <PlayerRow
+                  key={p.slot}
+                  player={p}
+                  mySlot={mySlot}
+                  isHost={isHost}
+                  takenFactions={takenByOthers(p.slot)}
+                />
               ))}
             </div>
+
+            {netError && (
+              <div style={{ color: '#f66', fontSize: 10, marginBottom: 8, padding: '4px 8px', background: '#1a0808', border: '1px solid #3a1818' }}>
+                {netError}
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {!isHost && (
