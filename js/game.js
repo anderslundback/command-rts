@@ -76,23 +76,26 @@ export function startNetGame(mapSeed, myFaction, role, aiSlots) {
 // ── Snapshot serialization (host → server → clients) ─────────────────────────
 
 function serializeEnt(e) {
-  const s = {
-    id: e.id, type: e.type, faction: e.faction, isBuilding: !!e.isBuilding,
-    x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp,
-    armorType: e.armorType, weaponType: e.weaponType, dmg: e.dmg, range: e.range,
-  };
+  // Only send fields clients can't derive from BDEF/UDEF, and skip defaults/nulls.
+  const s = { id: e.id, type: e.type, faction: e.faction, x: e.x, y: e.y, hp: e.hp };
   if (e.isBuilding) {
-    s.w = e.w; s.h = e.h; s.bprog = e.bprog;
-    s.trainQ = e.trainQ ? e.trainQ.map(it => ({ ...it })) : [];
-    s.repairing = !!e.repairing;
-    s.waypoint = e.waypoint ? { ...e.waypoint } : null;
-    s.atimer = e.atimer; s.target = e.target;
+    s.b = 1;
+    if (e.bprog !== 1)   s.bprog = e.bprog;
+    if (e.repairing)     s.repairing = 1;
+    if (e.waypoint)      s.waypoint = { tx: e.waypoint.tx, ty: e.waypoint.ty };
+    if (e.atimer)        s.atimer = e.atimer;
+    if (e.target != null) s.target = e.target;
+    s.trainQ = e.trainQ?.length ? e.trainQ.map(it => ({ ...it })) : [];
   } else {
-    s.state = e.state; s.target = e.target; s.mprog = e.mprog; s.facing = e.facing;
-    s.ore = e.ore; s.maxOre = e.maxOre;
-    s.harvestTile = e.harvestTile ? { ...e.harvestTile } : null;
-    s.refineryId = e.refineryId; s.destPx = e.destPx; s.destPy = e.destPy;
-    s.splash = e.splash; s.speed = e.speed; s.aspd = e.aspd;
+    if (e.state !== 'idle') s.state = e.state;
+    if (e.target != null)   s.target = e.target;
+    if (e.mprog)            s.mprog = e.mprog;
+    if (e.facing)           s.facing = e.facing;
+    if (e.ore)              s.ore = e.ore;
+    if (e.harvestTile)      s.harvestTile = { ...e.harvestTile };
+    if (e.refineryId != null) s.refineryId = e.refineryId;
+    if (e.destPx != null)   s.destPx = e.destPx;
+    if (e.destPy != null)   s.destPy = e.destPy;
   }
   return s;
 }
@@ -131,22 +134,26 @@ export function applySnapshot(snap) {
   state.gameStats     = snap.gameStats;
   state.net.snapshotTick = snap.tick;
 
+  const selectedIds = new Set(state.selected.map(e => e.id));
   state.entById.clear();
   state.entities = snap.entities.map(s => {
-    const e = s.isBuilding ? deserializeBuilding(s) : deserializeUnit(s);
+    const e = s.b ? deserializeBuilding(s) : deserializeUnit(s);
     state.entById.set(e.id, e);
     return e;
   });
+  // Reconcile selection: restore by id so 100ms snapshots don't clear UI selection.
+  state.selected = state.entities.filter(e => selectedIds.has(e.id));
 }
 
 function deserializeBuilding(s) {
   const e = Object.create(Building.prototype);
   const d = BDEF[s.type] ?? {};
+  const b = FBONUSES[s.faction] ?? FBONUSES[0];
   Object.assign(e, {
     id: s.id, faction: s.faction, type: s.type, isBuilding: true,
     x: s.x, y: s.y, px: s.x * TS, py: s.y * TS,
-    hp: s.hp, maxHp: s.maxHp, dead: false, hitFlash: 0,
-    w: s.w ?? d.w ?? 1, h: s.h ?? d.h ?? 1,
+    hp: s.hp, maxHp: ((d.hp ?? 100) * b.hpMult) | 0, dead: false, hitFlash: 0,
+    w: d.w ?? 1, h: d.h ?? 1,
     bprog: s.bprog ?? 1,
     btotal: (d.btime ?? 0) * 60,
     trainQ: s.trainQ ?? [],
@@ -154,10 +161,10 @@ function deserializeBuilding(s) {
     waypoint: s.waypoint ?? null,
     atimer: s.atimer ?? 0,
     target: s.target ?? null,
-    armorType:  s.armorType  ?? 'building',
-    weaponType: s.weaponType ?? null,
-    dmg:   s.dmg   ?? d.dmg   ?? 0,
-    range: s.range ?? d.range ?? 0,
+    armorType:  d.armor  ?? 'building',
+    weaponType: d.weapon ?? null,
+    dmg:   d.dmg   ?? 0,
+    range: d.range ?? 0,
     aspd:  d.aspd  ?? 0,
     power: d.power ?? 0,
   });
@@ -167,24 +174,25 @@ function deserializeBuilding(s) {
 function deserializeUnit(s) {
   const e = Object.create(Unit.prototype);
   const d = UDEF[s.type] ?? {};
+  const b = FBONUSES[s.faction] ?? FBONUSES[0];
   Object.assign(e, {
     id: s.id, faction: s.faction, type: s.type, isUnit: true,
     x: s.x, y: s.y, px: s.x * TS, py: s.y * TS,
-    hp: s.hp, maxHp: s.maxHp, dead: false, hitFlash: 0,
+    hp: s.hp, maxHp: ((d.hp ?? 100) * b.hpMult) | 0, dead: false, hitFlash: 0,
     state: s.state ?? 'idle',
     path: [], mprog: s.mprog ?? 0, atimer: 0,
     target: s.target ?? null,
     harvestTile: s.harvestTile ?? null,
     refineryId: s.refineryId ?? null,
-    ore: s.ore ?? 0, maxOre: s.maxOre ?? 90,
+    ore: s.ore ?? 0, maxOre: 90,
     facing: s.facing ?? 0,
-    speed: s.speed ?? d.speed ?? 1,
-    dmg:   s.dmg   ?? d.dmg  ?? 0,
-    range: s.range ?? d.range ?? 1,
-    aspd:  s.aspd  ?? d.aspd ?? 60,
-    armorType:  s.armorType  ?? 'infantry',
-    weaponType: s.weaponType ?? null,
-    splash: s.splash ?? d.splash ?? 0,
+    speed: (d.speed ?? 1) * b.speedMult,
+    dmg:   d.dmg   ?? 0,
+    range: d.range ?? 1,
+    aspd:  d.aspd  ?? 60,
+    armorType:  d.armor  ?? 'infantry',
+    weaponType: d.weapon ?? null,
+    splash: d.splash ?? 0,
     destPx: s.destPx, destPy: s.destPy,
   });
   return e;

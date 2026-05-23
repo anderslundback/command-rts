@@ -3,6 +3,17 @@ import { WebSocketServer } from 'ws';
 const PORT = process.env.PORT ?? 3001;
 const wss = new WebSocketServer({ port: PORT });
 
+// Prune connections that dropped without a clean close (mobile, bad networks).
+// Uses the ws protocol-level ping/pong, separate from our JSON ping/pong.
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.isAlive) { ws.terminate(); continue; }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, 15_000);
+wss.on('close', () => clearInterval(heartbeat));
+
 // code → { hostWs, slots: Map<slot→ws>, players: PlayerEntry[] }
 const rooms = new Map();
 // ws → { code, slot }
@@ -35,6 +46,9 @@ function makeAiPlayer(slot, faction) {
 }
 
 wss.on('connection', ws => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+
   ws.on('message', raw => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }

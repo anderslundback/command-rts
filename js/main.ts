@@ -20,6 +20,19 @@ function init() {
 
   initInput();
 
+  // Push a sentinel so the browser has a "back" target that stays on this page.
+  history.pushState(null, '', location.href);
+  window.addEventListener('popstate', () => {
+    if (state.gameStarted && !state.gameOver) {
+      history.pushState(null, '', location.href);
+    }
+  });
+  window.addEventListener('beforeunload', (e: BeforeUnloadEvent) => {
+    if (state.gameStarted && !state.gameOver) {
+      e.preventDefault();
+    }
+  });
+
   const menuLoop = () => {
     if (!state.gameStarted) {
       state.ctx.fillStyle = '#050810';

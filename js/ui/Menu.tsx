@@ -168,7 +168,10 @@ export function Menu(): React.ReactElement {
     setNetError('');
     import('../game.js').catch(console.error); // register net callbacks before game_start fires
     net.connect(__WS_URL__);
-    net.on('room_created', (msg: any) => {
+
+    const onCreated = (msg: any) => {
+      net.off('room_created', onCreated);
+      net.off('error', onNetError);
       uiStore.setState({
         phase: 'lobby',
         lobby: {
@@ -180,8 +183,14 @@ export function Menu(): React.ReactElement {
           myName: name,
         },
       });
-    });
-    net.on('error', (msg: any) => setNetError(msg.reason ?? 'Connection error'));
+    };
+    const onNetError = (msg: any) => {
+      net.off('room_created', onCreated);
+      net.off('error', onNetError);
+      setNetError(msg.reason ?? 'Connection error');
+    };
+    net.on('room_created', onCreated);
+    net.on('error', onNetError);
     net.send({ type: 'create_room', name });
   };
 
@@ -192,7 +201,10 @@ export function Menu(): React.ReactElement {
     setNetError('');
     import('../game.js').catch(console.error); // register net callbacks before game_start fires
     net.connect(__WS_URL__);
-    net.on('room_joined', (msg: any) => {
+
+    const onJoined = (msg: any) => {
+      net.off('room_joined', onJoined);
+      net.off('error', onNetError);
       uiStore.setState({
         phase: 'lobby',
         lobby: {
@@ -204,13 +216,21 @@ export function Menu(): React.ReactElement {
           myName: name,
         },
       });
-    });
-    net.on('lobby_update', (msg: any) => {
+    };
+    const onNetError = (msg: any) => {
+      net.off('room_joined', onJoined);
+      net.off('lobby_update', onLobbyUpdate);
+      net.off('error', onNetError);
+      setNetError(msg.reason ?? 'Connection error');
+    };
+    const onLobbyUpdate = (msg: any) => {
       uiStore.setState((st: any) => ({
         lobby: st.lobby ? { ...st.lobby, players: msg.players } : null,
       }));
-    });
-    net.on('error', (msg: any) => setNetError(msg.reason ?? 'Connection error'));
+    };
+    net.on('room_joined', onJoined);
+    net.on('lobby_update', onLobbyUpdate);
+    net.on('error', onNetError);
     net.send({ type: 'join_room', code, name });
   };
 
