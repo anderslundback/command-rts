@@ -150,7 +150,6 @@ export function applySnapshot(snap) {
   state.gameStats     = snap.gameStats;
   state.net.snapshotTick = snap.tick;
 
-  const selectedIds = new Set(state.selected.map(e => e.id));
   state.entById.clear();
   const snapAt = performance.now();
   state.entities = snap.entities.map(s => {
@@ -170,8 +169,9 @@ export function applySnapshot(snap) {
     }
     return e;
   });
-  // Reconcile selection: restore by id so 100ms snapshots don't clear UI selection.
-  state.selected = state.entities.filter(e => selectedIds.has(e.id));
+  // state.selected is an array of entity IDs — prune any that no longer exist.
+  const liveIds = new Set(snap.entities.map(s => s.id));
+  state.selected = state.selected.filter(id => liveIds.has(id));
 }
 
 function deserializeBuilding(s) {
