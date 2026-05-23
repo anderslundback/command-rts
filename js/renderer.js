@@ -499,9 +499,9 @@ function bldRadar(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick) {
   ctx.fillStyle = bd; ctx.fillRect(bx, by, bw, bh);
   // Support pillar
   ctx.fillStyle = bd;
-  ctx.fillRect(cx - 5, dishY, 10, bh - 28 + by);
+  ctx.fillRect(cx - 5, dishY, 10, bh - 28);
   ctx.strokeStyle = bc; ctx.lineWidth = 1;
-  ctx.strokeRect(cx - 4.5, dishY + 0.5, 9, bh - 28 + by - 1);
+  ctx.strokeRect(cx - 4.5, dishY + 0.5, 9, bh - 29);
   // Platform at pillar top
   ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(cx - 14, dishY - 3, 28, 4);
   ctx.strokeStyle = bc; ctx.lineWidth = 0.75; ctx.strokeRect(cx - 13.5, dishY - 2.5, 27, 3);
