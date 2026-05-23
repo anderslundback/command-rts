@@ -64,31 +64,27 @@ export const net = {
   },
 };
 
-// ── Command dispatch (client → server relay → host) ───────────────────────────
-let _seq = 0;
-export function dispatchCommand(cmd) {
-  net.send({ type: 'cmd', seq: ++_seq, cmd });
+// ── Input dispatch (rollback netcode) ────────────────────────────────────────
+export function scheduleInput(cmd) {
+  // Record input for the NEXT tick (which hasn't been simulated yet).
+  _cb.scheduleInput?.(cmd);
 }
+
+// Keep dispatchCommand as alias for legacy call sites that haven't been migrated yet.
+export { scheduleInput as dispatchCommand };
 
 // ── Game-phase message handlers ───────────────────────────────────────────────
 
-// Host receives relayed commands from clients
-net.on('cmd', msg => _cb.onCmd?.(msg));
-
-// Clients receive state snapshots from host
-net.on('snapshot', msg => _cb.applySnapshot?.(msg));
-
-// All players receive game_start — host and clients both call startNetGame
+// All players receive game_start and run the same simulation
 net.on('game_start', msg => {
   const lobby = uiStore.getState().lobby;
   if (!lobby) return;
-  const role = lobby.isHost ? 'host' : 'client';
   const myFaction = msg.slotFactions[lobby.mySlot];
   uiStore.setState(st => ({
     phase: 'playing',
-    net: { ...st.net, connected: true, role },
+    net: { ...st.net, connected: true, role: 'player' },
   }));
-  _cb.startNetGame?.(msg.mapSeed, lobby.mySlot, myFaction, role, msg.aiSlots, msg.slotFactions);
+  _cb.startNetGame?.(msg.mapSeed, lobby.mySlot, myFaction, msg.aiSlots, msg.slotFactions);
 });
 
 // Player left during game — notify and hand their faction to AI on host

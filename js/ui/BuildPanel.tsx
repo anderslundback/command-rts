@@ -7,7 +7,7 @@ import * as _C from '../constants.js';
 // @ts-ignore
 import * as _S from '../state.js';
 // @ts-ignore
-import { dispatchCommand } from '../net/netClient.js';
+import { scheduleInput } from '../net/netClient.js';
 
 const BDEF: any = (_C as any).BDEF;
 const UDEF: any = (_C as any).UDEF;
@@ -16,8 +16,6 @@ const BUILD_TYPES: string[] = (_C as any).BUILD_TYPES;
 const DEFENSE_TYPES: string[] = (_C as any).DEFENSE_TYPES;
 const TRAIN_FROM: Record<string, string[]> = (_C as any).TRAIN_FROM;
 const state: any = (_S as any).state;
-
-const isNetClient = () => state.net?.role === 'client';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,8 +60,8 @@ function QueueRow({
 
   const handleCancel = (ev: React.MouseEvent) => {
     ev.stopPropagation();
-    if (isNetClient()) {
-      dispatchCommand({ action: 'cancel_build', faction: state.playerFaction, queueType: isDefQueue ? 'def' : 'build', index });
+    if (state.net) {
+      scheduleInput({ action: 'cancel_build', faction: state.playerFaction, queueType: isDefQueue ? 'def' : 'build', index });
       return;
     }
     mutate(s => {
@@ -225,8 +223,8 @@ function TrainRow({
 
   const handleCancel = (ev: React.MouseEvent) => {
     ev.stopPropagation();
-    if (isNetClient()) {
-      dispatchCommand({ action: 'cancel_train', bldgId, index: itemIndex });
+    if (state.net) {
+      scheduleInput({ action: 'cancel_train', bldgId, index: itemIndex });
       return;
     }
     mutate(s => {
@@ -360,14 +358,14 @@ function BuildTab(): React.ReactElement {
     });
 
   const handleBuild = (type: string) => {
-    if (isNetClient()) { dispatchCommand({ action: 'queue_build', faction: state.playerFaction, btype: type, queueType: 'build' }); return; }
+    if (state.net) { scheduleInput({ action: 'queue_build', faction: state.playerFaction, btype: type, queueType: 'build' }); return; }
     const f = state.playerFaction;
     state.hudBuildQueue[f].push({ type, t: 0, total: BDEF[type].btime * 60, paid: 0, ready: false });
     mutate(() => {});
   };
 
   const handleDefBuild = (type: string) => {
-    if (isNetClient()) { dispatchCommand({ action: 'queue_build', faction: state.playerFaction, btype: type, queueType: 'def' }); return; }
+    if (state.net) { scheduleInput({ action: 'queue_build', faction: state.playerFaction, btype: type, queueType: 'def' }); return; }
     const f = state.playerFaction;
     state.hudDefQueue[f].push({ type, t: 0, total: BDEF[type].btime * 60, paid: 0, ready: false });
     mutate(() => {});
@@ -507,8 +505,8 @@ function TrainTab(): React.ReactElement {
         ? primaryEnt
         : done.find((b: any) => b.type === bldgType);
     if (!building) return;
-    if (isNetClient()) {
-      for (let i = 0; i < count; i++) dispatchCommand({ action: 'queue_train', bldgId: building.id, utype });
+    if (state.net) {
+      for (let i = 0; i < count; i++) scheduleInput({ action: 'queue_train', bldgId: building.id, utype });
       return;
     }
     const d = UDEF[utype];

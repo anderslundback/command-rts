@@ -72,7 +72,7 @@ export interface LobbyState {
 
 export interface NetState {
   connected: boolean;
-  role: 'none' | 'host' | 'client';
+  role: 'none' | 'player';
   latencyMs: number;
 }
 

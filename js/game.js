@@ -1,4 +1,5 @@
 import { TS, HUD_H, SIDEBAR_W, FDATA, FBONUSES, T, BDEF, UDEF } from './constants.js';
+import { makeLCG } from './rng.js';
 import { state } from './state.js';
 import { genMap, genMapFromSeed, tickOreRegen, startPositions } from './map.js';
 import { resetEid, removeDeadEnts, Building, Unit } from './entities.js';
@@ -17,12 +18,14 @@ import { speak } from './audio.js';
 import { clampCam } from './input.js';
 import { syncFromGameState } from './store.js';
 import { net, registerGameCallbacks } from './net/netClient.js';
+import { applyCommand } from './commands.js';
+import { storeTickSnapshot, onRemoteInput, entityHash } from './lockstep.js';
 
 // ── Skirmish (single-player vs AI) ───────────────────────────────────────────
 
 export function startGame(pf) {
-  if (state.net?.snapTimer) clearInterval(state.net.snapTimer);
   state.net = null;
+  state.rng = makeLCG((Math.random() * 0xffffffff) >>> 0);
   _resetGameState(pf, [1000, 2000, 2000]);
 
   genMap();
@@ -36,290 +39,53 @@ export function startGame(pf) {
   recordPower();
   _centerCamOn(pf);
   syncFromGameState();
-  if (state.frameId) cancelAnimationFrame(state.frameId);
+  if (state.frameId) { cancelAnimationFrame(state.frameId); clearTimeout(state.frameId); }
+  _accumulator = 0; _lastLoopTime = 0;
   loop();
 }
 
 // ── Multiplayer host/client entry ────────────────────────────────────────────
 
-export function startNetGame(mapSeed, mySlot, myFaction, role, aiSlots, slotFactions) {
-  state.net = { role, myFaction, commandQueue: [], snapshotTick: 0, slotFactions };
+export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) {
+  state.rng = makeLCG(mapSeed);
+  // Rollback buffer: 8 snapshots at 20Hz = 400ms of history
+  state.rollback = { buffer: new Array(8).fill(null), inputHistory: {}, predictions: {} };
+  state.net = { myFaction, mySlot, slotFactions };
   _resetGameState(myFaction, [1000, 2000, 2000]);
 
   genMapFromSeed(mapSeed);
   _populateOreHistory();
   state.AI = [null, null, null];
-
-  if (role === 'host') {
-    // Create AI for each AI slot, keyed by the chosen faction for that slot
-    for (let i = 0; i < 3; i++) {
-      if (aiSlots[i] && slotFactions[i] != null) state.AI[slotFactions[i]] = makeAI(slotFactions[i]);
-    }
-    _placeStartingEntities(slotFactions);
-    // Pre-mark unused faction indices (no slot mapped to them) as eliminated
-    for (let f = 0; f < 3; f++) {
-      if (!slotFactions.includes(f)) state.factionEliminated[f] = true;
-    }
-    calcPower();
-    initFog();
-    updateFog();
-    recordPower();
-    // Broadcast snapshots on a fixed timer independent of the render loop so
-    // background-tab RAF throttling doesn't starve clients of updates.
-    clearInterval(state.net.snapTimer);
-    state.net.snapTimer = setInterval(() => {
-      if (state.gameStarted && state.net?.role === 'host') broadcastSnapshot();
-    }, 100);
-  } else {
-    initFog();
+  // All players run the full simulation — AI is deterministic via state.rng
+  for (let i = 0; i < 3; i++) {
+    if (aiSlots[i] && slotFactions[i] != null) state.AI[slotFactions[i]] = makeAI(slotFactions[i]);
   }
+  _placeStartingEntities(slotFactions);
+  for (let f = 0; f < 3; f++) {
+    if (!slotFactions.includes(f)) state.factionEliminated[f] = true;
+  }
+  calcPower();
+  initFog();
+  updateFog();
+  recordPower();
+
+  // Wire up rollback input handler
+  net.on('input', msg => {
+    if (msg.slot !== state.net.mySlot) {
+      onRemoteInput(msg.tick, msg.slot, msg.cmd, applyCommand, _gameTick);
+    }
+  });
 
   _centerCamOn(mySlot);
   syncFromGameState();
   if (state.frameId) { cancelAnimationFrame(state.frameId); clearTimeout(state.frameId); }
+  _accumulator = 0; _lastLoopTime = 0;
   loop();
-}
-
-// ── Snapshot serialization (host → server → clients) ─────────────────────────
-
-function serializeEnt(e) {
-  // Only send fields clients can't derive from BDEF/UDEF, and skip defaults/nulls.
-  const s = { id: e.id, type: e.type, faction: e.faction, x: e.x, y: e.y, hp: e.hp };
-  if (e.isBuilding) {
-    s.b = 1;
-    if (e.bprog !== 1)   s.bprog = e.bprog;
-    if (e.repairing)     s.repairing = 1;
-    if (e.waypoint)      s.waypoint = { tx: e.waypoint.tx, ty: e.waypoint.ty };
-    if (e.atimer)        s.atimer = e.atimer;
-    if (e.target != null) s.target = e.target;
-    s.trainQ = e.trainQ?.length ? e.trainQ.map(it => ({ ...it })) : [];
-  } else {
-    if (e.state !== 'idle') s.state = e.state;
-    if (e.target != null)   s.target = e.target;
-    if (e.mprog)            s.mprog = e.mprog;
-    if (e.facing)           s.facing = e.facing;
-    if (e.ore)              s.ore = e.ore;
-    if (e.harvestTile)      s.harvestTile = { ...e.harvestTile };
-    if (e.refineryId != null) s.refineryId = e.refineryId;
-    if (e.destPx != null)   s.destPx = e.destPx;
-    if (e.destPy != null)   s.destPy = e.destPy;
-    // Send actual pixel position so clients can interpolate smoothly
-    s.px = Math.round(e.px);
-    s.py = Math.round(e.py);
-  }
-  return s;
-}
-
-function broadcastSnapshot() {
-  net.send({
-    type: 'snapshot',
-    tick: state.tick,
-    credits: [...state.credits],
-    powerUsed: [...state.powerUsed],
-    powerGen:  [...state.powerGen],
-    hudBuildQueue: state.hudBuildQueue.map(q => q.map(it => ({ ...it }))),
-    hudDefQueue:   state.hudDefQueue.map(q => q.map(it => ({ ...it }))),
-    entities: state.entities.filter(e => !e.dead).map(serializeEnt),
-    gameOver: state.gameOver,
-    gameOverDelay: state.gameOverDelay,
-    factionEliminated: [...state.factionEliminated],
-    gameStats: { ...state.gameStats, powerHistory: [...state.gameStats.powerHistory] },
-  });
-}
-
-// ── Snapshot application (client side) ───────────────────────────────────────
-
-export function applySnapshot(snap) {
-  if (state.net?.role !== 'client') return;
-
-  // Capture current visual positions before replacing entities
-  const prevPos = new Map();
-  for (const e of state.entities) {
-    if (!e.dead && e.isUnit) prevPos.set(e.id, { px: e.px, py: e.py });
-  }
-
-  state.tick          = snap.tick;
-  state.credits       = snap.credits;
-  state.powerUsed     = snap.powerUsed;
-  state.powerGen      = snap.powerGen;
-  state.hudBuildQueue = snap.hudBuildQueue;
-  state.hudDefQueue   = snap.hudDefQueue;
-  state.gameOver      = snap.gameOver;
-  state.gameOverDelay = snap.gameOverDelay;
-  state.factionEliminated = snap.factionEliminated;
-  state.gameStats     = snap.gameStats;
-  state.net.snapshotTick = snap.tick;
-
-  state.entById.clear();
-  const snapAt = performance.now();
-  state.entities = snap.entities.map(s => {
-    const e = s.b ? deserializeBuilding(s) : deserializeUnit(s);
-    state.entById.set(e.id, e);
-    if (!s.b) {
-      // Set up smooth interpolation: slide from where the unit visually was
-      // to where the host says it is now, over the snapshot interval (~100ms).
-      const prev = prevPos.get(s.id);
-      e._toPx   = s.px ?? s.x * TS;
-      e._toPy   = s.py ?? s.y * TS;
-      e._prevPx = prev ? prev.px : e._toPx;
-      e._prevPy = prev ? prev.py : e._toPy;
-      e._snapAt = snapAt;
-      e.px = e._prevPx;
-      e.py = e._prevPy;
-    }
-    return e;
-  });
-  // state.selected is an array of entity IDs — prune any that no longer exist.
-  const liveIds = new Set(snap.entities.map(s => s.id));
-  state.selected = state.selected.filter(id => liveIds.has(id));
-  updateFog();
-}
-
-function deserializeBuilding(s) {
-  const e = Object.create(Building.prototype);
-  const d = BDEF[s.type] ?? {};
-  const b = FBONUSES[s.faction] ?? FBONUSES[0];
-  Object.assign(e, {
-    id: s.id, faction: s.faction, type: s.type, isBuilding: true,
-    x: s.x, y: s.y, px: s.x * TS, py: s.y * TS,
-    hp: s.hp, maxHp: ((d.hp ?? 100) * b.hpMult) | 0, dead: false, hitFlash: 0,
-    w: d.w ?? 1, h: d.h ?? 1,
-    bprog: s.bprog ?? 1,
-    btotal: (d.btime ?? 0) * 60,
-    trainQ: s.trainQ ?? [],
-    repairing: !!s.repairing,
-    waypoint: s.waypoint ?? null,
-    atimer: s.atimer ?? 0,
-    target: s.target ?? null,
-    armorType:  d.armor  ?? 'building',
-    weaponType: d.weapon ?? null,
-    dmg:   d.dmg   ?? 0,
-    range: d.range ?? 0,
-    aspd:  d.aspd  ?? 0,
-    power: d.power ?? 0,
-  });
-  return e;
-}
-
-function deserializeUnit(s) {
-  const e = Object.create(Unit.prototype);
-  const d = UDEF[s.type] ?? {};
-  const b = FBONUSES[s.faction] ?? FBONUSES[0];
-  Object.assign(e, {
-    id: s.id, faction: s.faction, type: s.type, isUnit: true,
-    x: s.x, y: s.y, px: s.x * TS, py: s.y * TS,
-    hp: s.hp, maxHp: ((d.hp ?? 100) * b.hpMult) | 0, dead: false, hitFlash: 0,
-    state: s.state ?? 'idle',
-    path: [], mprog: s.mprog ?? 0, atimer: 0,
-    target: s.target ?? null,
-    harvestTile: s.harvestTile ?? null,
-    refineryId: s.refineryId ?? null,
-    ore: s.ore ?? 0, maxOre: 90,
-    facing: s.facing ?? 0,
-    speed: (d.speed ?? 1) * b.speedMult,
-    dmg:   d.dmg   ?? 0,
-    range: d.range ?? 1,
-    aspd:  d.aspd  ?? 60,
-    armorType:  d.armor  ?? 'infantry',
-    weaponType: d.weapon ?? null,
-    splash: d.splash ?? 0,
-    destPx: s.destPx, destPy: s.destPy,
-  });
-  return e;
-}
-
-// ── Command application (host side) ──────────────────────────────────────────
-
-function applyQueuedCommands() {
-  if (!state.net.commandQueue.length) return;
-  for (const { cmd } of state.net.commandQueue.splice(0)) applyCommand(cmd);
-}
-
-function applyCommand(cmd) {
-  switch (cmd.action) {
-    case 'move':
-      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && !u.dead) orderMove(u, cmd.tx, cmd.ty); }
-      break;
-    case 'attack': {
-      const t = state.entById.get(cmd.targetId);
-      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && t && !u.dead) orderAttack(u, t); }
-      break;
-    }
-    case 'stop':
-      for (const id of cmd.ids) { const u = state.entById.get(id); if (u) orderStop(u); }
-      break;
-    case 'harvest': {
-      const ref = state.entById.get(cmd.refineryId);
-      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && ref) orderHarvest(u, ref); }
-      break;
-    }
-    case 'place': {
-      const placed = placeBuilding(cmd.faction, cmd.btype, cmd.tx, cmd.ty, true);
-      if (placed) {
-        for (const q of [state.hudBuildQueue[cmd.faction], state.hudDefQueue[cmd.faction]]) {
-          const idx = q.findIndex(it => it.type === cmd.btype && it.ready);
-          if (idx >= 0) { q.splice(idx, 1); break; }
-        }
-      }
-      break;
-    }
-    case 'queue_build': {
-      const q = cmd.queueType === 'def' ? state.hudDefQueue[cmd.faction] : state.hudBuildQueue[cmd.faction];
-      if (q) q.push({ type: cmd.btype, t: 0, total: (BDEF[cmd.btype]?.btime ?? 20) * 60, paid: 0, ready: false });
-      break;
-    }
-    case 'cancel_build': {
-      const q = cmd.queueType === 'def' ? state.hudDefQueue[cmd.faction] : state.hudBuildQueue[cmd.faction];
-      if (q && cmd.index < q.length) {
-        state.credits[cmd.faction] += BDEF[q[cmd.index].type]?.cost ?? 0;
-        q.splice(cmd.index, 1);
-      }
-      break;
-    }
-    case 'queue_train': {
-      const b = state.entById.get(cmd.bldgId);
-      if (b && b.trainQ && b.trainQ.length < 5)
-        b.trainQ.push({ type: cmd.utype, t: 0, total: (UDEF[cmd.utype]?.ttime ?? 20) * 60 });
-      break;
-    }
-    case 'cancel_train': {
-      const b = state.entById.get(cmd.bldgId);
-      if (b && b.trainQ && cmd.index < b.trainQ.length) {
-        state.credits[b.faction] += UDEF[b.trainQ[cmd.index].type]?.cost ?? 0;
-        b.trainQ.splice(cmd.index, 1);
-      }
-      break;
-    }
-    case 'sell': {
-      const b = state.entById.get(cmd.entId);
-      if (b && !b.dead) { state.credits[b.faction] += (BDEF[b.type]?.cost ?? 0) * 0.5; b.dead = true; }
-      break;
-    }
-    case 'repair': {
-      const b = state.entById.get(cmd.entId);
-      if (b) b.repairing = cmd.toggle;
-      break;
-    }
-    case 'deploy_mcv': {
-      const u = state.entById.get(cmd.unitId);
-      if (u && !u.dead) deployMcvInPlace(u);
-      break;
-    }
-    case 'waypoint': {
-      const b = state.entById.get(cmd.entId);
-      if (b) b.waypoint = { tx: cmd.tx, ty: cmd.ty };
-      break;
-    }
-    case 'set_primary':
-      state.primaryBuilding[cmd.btype] = cmd.entId;
-      break;
-  }
 }
 
 // ── Shared lifecycle ──────────────────────────────────────────────────────────
 
 export function showMenu() {
-  if (state.net?.snapTimer) clearInterval(state.net.snapTimer);
   state.net = null;
   state.gameStarted = false;
   state.gameOver = false;
@@ -335,41 +101,16 @@ export function togglePause() {
 
 // ── Game loop ─────────────────────────────────────────────────────────────────
 
+const TICK_MS = 50; // 20 Hz fixed simulation rate
+let _accumulator = 0;
+let _lastLoopTime = 0;
+
 function loop() {
   const now = performance.now();
   if (state.fpsLastTime > 0) {
     state.fpsSmooth = state.fpsSmooth * 0.9 + (1000 / (now - state.fpsLastTime)) * 0.1;
   }
   state.fpsLastTime = now;
-
-  state.tick++;
-
-  // Client-only: interpolate unit positions between 10Hz snapshots for smooth rendering.
-  if (state.net?.role === 'client') {
-    if (state.gameStarted && !state.gameOver) {
-      const now = performance.now();
-      for (const e of state.entities) {
-        if (e.dead) continue;
-        if (e.isUnit && e._snapAt != null) {
-          // Linear interpolation toward the host-authoritative position over 110ms
-          // (slightly past the 100ms snapshot interval to avoid stalling at the end)
-          const t = Math.min((now - e._snapAt) / 110, 1);
-          e.px = e._prevPx + (e._toPx - e._prevPx) * t;
-          e.py = e._prevPy + (e._toPy - e._prevPy) * t;
-        }
-        if (e.hitFlash > 0) e.hitFlash--;
-      }
-      updateShells();
-      let mi = state.moveIndicators.length;
-      while (mi--) { state.moveIndicators[mi].t--; if (state.moveIndicators[mi].t <= 0) state.moveIndicators.splice(mi, 1); }
-    }
-    updateParticles();
-    syncFromGameState();
-    render();
-    renderMinimap();
-    state.frameId = requestAnimationFrame(loop);
-    return;
-  }
 
   if (state.paused) {
     render();
@@ -378,55 +119,128 @@ function loop() {
     return;
   }
 
+  // Accumulator-based fixed-rate simulation (all players: skirmish + multiplayer).
+  // Caps dt at 200ms to prevent spiral-of-death on tab focus restore.
   if (state.gameStarted) {
-    if (!state.gameOver) {
-      for (let fi = 0; fi < 3; fi++) {
-        if (!state.factionEliminated[fi]) {
-          const hasBuildings = state.entities.some(e => !e.dead && e.isBuilding && e.faction === fi);
-          if (!hasBuildings) {
-            state.factionEliminated[fi] = true;
-            if (fi !== state.playerFaction) {
-              setMsg(FDATA[fi].name + ' eliminated!', 300);
-              speak(FDATA[fi].name + ' eliminated');
-            }
-          }
-        }
-      }
-      checkVictory();
-    } else if (state.gameOverDelay > 0) {
-      state.gameOverDelay--;
+    const dt = _lastLoopTime > 0 ? Math.min(now - _lastLoopTime, 200) : 0;
+    _accumulator += dt;
+    while (_accumulator >= TICK_MS) {
+      gameTick();
+      _accumulator -= TICK_MS;
     }
-
-    if (!state.gameOver) {
-      for (const e of state.entities) {
-        if (e.dead) continue;
-        if (e.isUnit)     updateUnit(e);
-        if (e.isBuilding) updateBuilding(e);
-      }
-      removeDeadEnts();
-      updateSidebarQueues();
-      for (let i = 0; i < 3; i++) state.AI[i]?.update();
-      if (state.net?.role === 'host') applyQueuedCommands();
-      updateShells();
-      updateFog();
-      if (state.tick % 300 === 1) recordPower();
-      tickOreRegen();
-      if (state.statusTimer > 0) state.statusTimer--;
-      let i = state.moveIndicators.length;
-      while (i--) { state.moveIndicators[i].t--; if (state.moveIndicators[i].t <= 0) state.moveIndicators.splice(i, 1); }
-    }
-    updateParticles();
-    syncFromGameState();
   }
+  _lastLoopTime = now;
 
+  updateParticles();
+  if (state.gameStarted) syncFromGameState();
+
+  // Lerp unit positions between ticks for smooth 60fps rendering.
+  const alpha = state.gameStarted ? _accumulator / TICK_MS : 0;
+  _applyRenderAlpha(alpha);
   render();
   renderMinimap();
-  // Use setTimeout when host tab is hidden so background-tab RAF throttling
-  // (which drops to ~1fps) doesn't stall the simulation.
-  if (state.net?.role === 'host' && document.hidden) {
+  _restoreRenderAlpha();
+
+  // Use setTimeout when tab is hidden to prevent background-tab RAF throttling
+  // from stalling the simulation (all players need consistent tick rate).
+  if (state.net && document.hidden) {
     state.frameId = setTimeout(loop, 16);
   } else {
     state.frameId = requestAnimationFrame(loop);
+  }
+}
+
+// Exposed so lockstep.js rollback can call it as simulateStepFn
+export function _gameTick() { gameTick(); }
+
+function gameTick() {
+  state.tick++;
+
+  // Snapshot unit positions before simulation for sub-tick render interpolation.
+  for (const e of state.entities) {
+    if (e.isUnit) { e.prevPx = e.px; e.prevPy = e.py; }
+  }
+
+  // Apply all inputs scheduled for this tick (local and remote via rollback system).
+  if (state.rollback) {
+    const inputs = state.rollback.inputHistory[state.tick];
+    if (inputs) {
+      for (const cmd of Object.values(inputs)) {
+        if (cmd) applyCommand(cmd);
+      }
+    }
+    // Mark untouched remote slots as predicted-null so rollback can detect mispredictions.
+    const mySlot = state.net?.mySlot;
+    if (mySlot != null) {
+      state.rollback.inputHistory[state.tick] ??= {};
+      for (const [slot] of (state.net?.slotFactions?.entries?.() ?? [])) {
+        if (slot !== mySlot && !(slot in state.rollback.inputHistory[state.tick])) {
+          state.rollback.inputHistory[state.tick][slot] = null;
+        }
+      }
+    }
+    storeTickSnapshot();
+  }
+
+  if (!state.gameOver) {
+    for (let fi = 0; fi < 3; fi++) {
+      if (!state.factionEliminated[fi]) {
+        const hasBuildings = state.entities.some(e => !e.dead && e.isBuilding && e.faction === fi);
+        if (!hasBuildings) {
+          state.factionEliminated[fi] = true;
+          if (!state.isRollingBack && fi !== state.playerFaction) {
+            setMsg(FDATA[fi].name + ' eliminated!', 300);
+            speak(FDATA[fi].name + ' eliminated');
+          }
+        }
+      }
+    }
+    checkVictory();
+  } else if (state.gameOverDelay > 0) {
+    state.gameOverDelay--;
+  }
+
+  if (!state.gameOver) {
+    for (const e of state.entities) {
+      if (e.dead) continue;
+      if (e.isUnit)     updateUnit(e);
+      if (e.isBuilding) updateBuilding(e);
+    }
+    removeDeadEnts();
+    updateSidebarQueues();
+    for (let i = 0; i < 3; i++) state.AI[i]?.update();
+    updateShells();
+    updateFog();
+    if (state.tick % 300 === 1) recordPower();
+    tickOreRegen();
+    if (state.statusTimer > 0) state.statusTimer--;
+    let i = state.moveIndicators.length;
+    while (i--) { state.moveIndicators[i].t--; if (state.moveIndicators[i].t <= 0) state.moveIndicators.splice(i, 1); }
+  }
+
+  // Periodic desync detection in multiplayer
+  if (state.rollback && !state.isRollingBack && state.tick % 20 === 0) {
+    net.send({ type: 'state_hash', tick: state.tick, hash: entityHash(state.entities) });
+  }
+}
+
+// Temporarily move unit positions to the sub-tick interpolated position for rendering.
+// Restores after render so game logic always sees authoritative positions.
+function _applyRenderAlpha(alpha) {
+  if (alpha <= 0) return;
+  for (const e of state.entities) {
+    if (!e.isUnit || e.prevPx === undefined) continue;
+    e._renderPx = e.px; e._renderPy = e.py;
+    e.px = e.prevPx + (e.px - e.prevPx) * alpha;
+    e.py = e.prevPy + (e.py - e.prevPy) * alpha;
+  }
+}
+
+function _restoreRenderAlpha() {
+  for (const e of state.entities) {
+    if (!e.isUnit || e._renderPx === undefined) continue;
+    e.px = e._renderPx; e.py = e._renderPy;
+    delete e._renderPx; delete e._renderPy;
   }
 }
 
@@ -526,16 +340,19 @@ function checkVictory() {
 
 // Register callbacks so netClient.js can reach game functions without circular imports
 registerGameCallbacks({
-  applySnapshot,
   startNetGame,
   showMenu: () => showMenu(),
-  onCmd: (msg) => { if (state.net?.role === 'host') state.net.commandQueue.push(msg); },
+  scheduleInput: (cmd) => {
+    if (!state.rollback) return;
+    const nextTick = state.tick + 1;
+    state.rollback.inputHistory[nextTick] ??= {};
+    state.rollback.inputHistory[nextTick][state.net.mySlot] = cmd;
+    net.send({ type: 'input', tick: nextTick, slot: state.net.mySlot, cmd });
+  },
   onPlayerLeft: (msg) => {
     setMsg(`${msg.name} has left the game`, 300);
-    // Host: hand the departed faction to AI so their units keep fighting
-    if (state.net?.role === 'host') {
-      const faction = state.net.slotFactions?.[msg.slot];
-      if (faction != null && !state.AI[faction]) state.AI[faction] = makeAI(faction);
-    }
+    // Hand the departed faction to AI so their units keep fighting
+    const faction = state.net?.slotFactions?.[msg.slot];
+    if (faction != null && !state.AI[faction]) state.AI[faction] = makeAI(faction);
   },
 });

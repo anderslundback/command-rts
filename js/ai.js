@@ -36,9 +36,9 @@ export function makeAI(f) {
           !has('radar')    && has('refinery') && cr >= 500 && ['radar',    cmd.x + 3, cmd.y - 3],
           !has('airfield') && has('radar')    && cr >= 800 && ['airfield', cmd.x - 5, cmd.y],
           has('barracks')  && this.myBuildings('turret').length < 4 && cr >= 350 &&
-            ['turret', cmd.x + ((Math.random() * 10 - 5) | 0), cmd.y + ((Math.random() * 10 - 5) | 0)],
+            ['turret', cmd.x + ((state.rng() * 10 - 5) | 0), cmd.y + ((state.rng() * 10 - 5) | 0)],
           has('radar') && this.myBuildings('antiair').length < 2 && cr >= 400 &&
-            ['antiair', cmd.x + ((Math.random() * 10 - 5) | 0), cmd.y + ((Math.random() * 10 - 5) | 0)],
+            ['antiair', cmd.x + ((state.rng() * 10 - 5) | 0), cmd.y + ((state.rng() * 10 - 5) | 0)],
         ].find(Boolean);
         if (tried) this._tryBuild(...tried);
       }
@@ -70,7 +70,7 @@ export function makeAI(f) {
       for (const u of this.myUnits('harvester'))
         if (u.state === 'idle') { const ref = nearestRefinery(this.f, u.x, u.y); if (ref) orderHarvest(u, ref); }
 
-      if (this.wtimer > 720 + ((Math.random() * 360) | 0)) {
+      if (this.wtimer > 720 + ((state.rng() * 360) | 0)) {
         this.wtimer = 0;
         const artType = ['artillery', 'v2rocket', 'tomahawk'][this.f];
         const airType = ['fighter', 'gunship', 'drone'][this.f];
@@ -84,14 +84,14 @@ export function makeAI(f) {
             (e.type === 'rifleman' || e.type === 'rocketeer' || e.type === 'tank'));
           let tgt = null;
           if (enemyUnits.length > 0) {
-            tgt = enemyUnits[(Math.random() * enemyUnits.length) | 0];
+            tgt = enemyUnits[(state.rng() * enemyUnits.length) | 0];
           } else {
             const enemyBuildings = state.entities.filter(e => !e.dead && e.isBuilding && e.faction !== this.f);
             for (const type of ['command', 'refinery', 'factory', 'barracks']) {
               tgt = enemyBuildings.find(b => b.type === type);
               if (tgt) break;
             }
-            if (!tgt) tgt = enemyBuildings[(Math.random() * enemyBuildings.length) | 0];
+            if (!tgt) tgt = enemyBuildings[(state.rng() * enemyBuildings.length) | 0];
           }
           if (tgt) fighters.forEach(u => orderAttack(u, tgt));
         }

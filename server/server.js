@@ -192,27 +192,52 @@ wss.on('connection', ws => {
         const mapSeed = (Math.random() * 0xffffffff) >>> 0;
         const slotFactions = room.players.map(p => p.isEmpty ? null : p.faction);
         const aiSlots = room.players.map(p => !p.isEmpty && p.isAI);
+        room.mapSeed = mapSeed; room.slotFactions = slotFactions; room.aiSlots = aiSlots;
         broadcast(room, { type: 'game_start', mapSeed, slotFactions, aiSlots });
         room.gameStarted = true;
         break;
       }
 
-      case 'cmd': {
+      case 'input': {
         if (!meta) return;
         const room = rooms.get(meta.code);
         if (!room) return;
-        send(room.hostWs, { type: 'cmd', seq: msg.seq, slot: meta.slot, cmd: msg.cmd });
+        // Broadcast input to all other players in the room
+        broadcast(room, { type: 'input', tick: msg.tick, slot: meta.slot, cmd: msg.cmd }, ws);
+        // Also relay to spectators (they simulate from real inputs with a delay buffer)
+        for (const specWs of room.spectators ?? []) {
+          send(specWs, { type: 'input', tick: msg.tick, slot: meta.slot, cmd: msg.cmd });
+        }
         break;
       }
 
-      case 'snapshot': {
+      case 'state_hash': {
         if (!meta) return;
         const room = rooms.get(meta.code);
-        if (!room || room.hostWs !== ws) return;
-        const packed = JSON.stringify(msg);
-        for (const [slot, clientWs] of room.slots) {
-          if (clientWs !== ws && clientWs.readyState === 1) clientWs.send(packed);
+        if (!room) return;
+        room.hashes ??= {};
+        room.hashes[msg.tick] ??= {};
+        room.hashes[msg.tick][meta.slot] = msg.hash;
+        const vals = Object.values(room.hashes[msg.tick]);
+        const humanCount = room.players.filter(p => !p.isAI && !p.isEmpty).length;
+        if (vals.length >= humanCount && !vals.every(h => h === vals[0])) {
+          broadcast(room, { type: 'desync', tick: msg.tick });
         }
+        // Prune old hash entries
+        for (const t of Object.keys(room.hashes)) {
+          if (Number(t) < msg.tick - 40) delete room.hashes[t];
+        }
+        break;
+      }
+
+      case 'spectate_room': {
+        const code = msg.code?.toUpperCase();
+        const room = rooms.get(code);
+        if (!room) { send(ws, { type: 'error', reason: 'room_not_found' }); return; }
+        room.spectators ??= new Set();
+        room.spectators.add(ws);
+        clients.set(ws, { code, slot: -1, isSpectator: true });
+        send(ws, { type: 'spectate_ok', mapSeed: room.mapSeed, slotFactions: room.slotFactions, aiSlots: room.aiSlots });
         break;
       }
 
@@ -229,21 +254,34 @@ wss.on('connection', ws => {
     const room = rooms.get(meta.code);
     if (!room) return;
 
-    if (room.hostWs === ws) {
-      broadcast(room, { type: 'error', reason: 'host_disconnected' });
-      rooms.delete(meta.code);
+    // Spectator disconnect — just remove from the set
+    if (meta.isSpectator) {
+      room.spectators?.delete(ws);
+      return;
+    }
+
+    const slot = meta.slot;
+    const name = room.players[slot]?.name ?? 'Player';
+    room.slots.delete(slot);
+    if (room.gameStarted) {
+      // Notify all players; each client will hand the departed faction to AI locally
+      broadcast(room, { type: 'player_left', slot, name });
     } else {
-      const slot = meta.slot;
-      const name = room.players[slot]?.name ?? 'Player';
-      room.slots.delete(slot);
-      if (room.gameStarted) {
-        // Notify remaining players; host will assign AI to the departed faction
-        broadcast(room, { type: 'player_left', slot, name });
-      } else {
-        // In lobby: replace with AI
-        room.players[slot] = makeAiPlayer(slot, room.players[slot]?.faction ?? slot);
-        lobbyUpdate(room);
+      // In lobby: replace with AI
+      room.players[slot] = makeAiPlayer(slot, room.players[slot]?.faction ?? slot);
+      // If the host left, promote another human or dissolve
+      if (room.hostWs === ws) {
+        const newHost = [...room.slots.values()][0];
+        if (newHost) {
+          room.hostWs = newHost;
+          const newMeta = clients.get(newHost);
+          if (newMeta) room.players[newMeta.slot].isHost = true;
+        } else {
+          rooms.delete(meta.code);
+          return;
+        }
       }
+      lobbyUpdate(room);
     }
   });
 });
