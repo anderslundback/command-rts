@@ -67,6 +67,11 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
 
   net.on('input', msg => {
     if (msg.slot !== state.net.mySlot) {
+      if (msg.cmd?.action === 'set_speed') {
+        state.gameSpeed = Math.max(0, Math.min(4, msg.cmd.speed));
+        resetAccumulator();
+        syncFromGameState();
+      }
       onRemoteInput(msg.tick, msg.slot, msg.cmd, applyCommand, _gameTick);
     }
   });
@@ -97,12 +102,11 @@ export function togglePause() {
 export function setGameSpeed(index) {
   if (!state.gameStarted) return;
   const clamped = Math.max(0, Math.min(4, index));
+  state.gameSpeed = clamped;
+  resetAccumulator();
+  syncFromGameState();
   if (state.net) {
     import('./net/netClient.js').then(m => m.scheduleInput({ action: 'set_speed', speed: clamped }));
-  } else {
-    state.gameSpeed = clamped;
-    resetAccumulator();
-    syncFromGameState();
   }
 }
 
@@ -201,6 +205,7 @@ function _resetGameState(playerFaction, startCredits) {
   state.controlGroups = [[], [], [], [], [], [], [], [], []];
   state.atkMoveMode = false;
   state.patrolMode = false;
+  state.forceAtkMode = false;
   state.replayMode = false;
   state.damageNumbers = [];
   state.underAttackTimer = 0;

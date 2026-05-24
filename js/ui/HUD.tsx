@@ -97,6 +97,12 @@ export function HUD(): React.ReactElement {
       {(netState.role === 'none' || lobby?.isHost) && (
         <SpeedControl speed={gameSpeed} />
       )}
+      {/* Read-only speed label for multiplayer clients */}
+      {netState.role !== 'none' && !lobby?.isHost && (
+        <span style={{ color: '#557', fontSize: 10, letterSpacing: 1, minWidth: 52, textAlign: 'center' }}>
+          {SPEED_LABELS[gameSpeed]}
+        </span>
+      )}
 
       {/* Net indicator */}
       {netState.role !== 'none' && (

@@ -62,6 +62,7 @@ export const state = {
   controlGroups: [[], [], [], [], [], [], [], [], []],
   atkMoveMode: false,
   patrolMode: false,
+  forceAtkMode: false,
   replayMode: false,
   _replayEndTick: 0,
   _lastGroupKey: -1,

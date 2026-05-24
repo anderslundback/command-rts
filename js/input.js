@@ -10,6 +10,8 @@ import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderHarvest } fr
 import { setMsg, updateBuildPanel, switchTab } from './hud.js';
 import { scheduleInput } from './net/netClient.js';
 
+const RED_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cline x1='16' y1='2' x2='16' y2='30' stroke='%23ff2222' stroke-width='2'/%3E%3Cline x1='2' y1='16' x2='30' y2='16' stroke='%23ff2222' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='none' stroke='%23ff2222' stroke-width='2'/%3E%3C/svg%3E") 16 16, crosshair`;
+
 export function initInput() {
   const canvas = state.canvas;
 
@@ -147,6 +149,34 @@ function onClick(ev) {
     return;
   }
 
+  if (state.forceAtkMode) {
+    const myUnits = state.selected.map(id => state.entById.get(id)).filter(u => u?.isUnit && u.faction === f && !u.dead && u.dmg > 0);
+    if (myUnits.length) {
+      const forceTarget = getEntAt(tx, ty);
+      if (forceTarget) {
+        if (state.net) {
+          scheduleInput({ action: 'force_attack', ids: myUnits.map(u => u.id), targetId: forceTarget.id, queued: ev.shiftKey });
+        } else {
+          myUnits.forEach(u => orderAttack(u, forceTarget, ev.shiftKey));
+        }
+      } else {
+        if (state.net) {
+          scheduleInput({ action: 'attack_move', ids: myUnits.map(u => u.id), tx, ty, queued: ev.shiftKey });
+        } else {
+          const cols = Math.ceil(Math.sqrt(myUnits.length));
+          myUnits.forEach((u, i) => {
+            const offX = (i % cols) - Math.floor(cols / 2);
+            const offY = Math.floor(i / cols) - Math.floor(cols / 2);
+            orderAttackMove(u, tx + offX, ty + offY, ev.shiftKey);
+          });
+        }
+        state.moveIndicators.push({ wx: tx * TS + TS / 2, wy: ty * TS + TS / 2, t: 30 });
+      }
+    }
+    if (!ev.shiftKey) { state.forceAtkMode = false; state.canvas.style.cursor = 'default'; }
+    return;
+  }
+
   if (state.repairMode) {
     const clicked = getEntAt(tx, ty);
     if (clicked?.isBuilding && clicked.faction === f && clicked.done) {
@@ -204,6 +234,36 @@ function onClick(ev) {
     return;
   }
 
+  // Ctrl+click: force attack any entity (even allies) or attack-move to ground
+  if ((ev.ctrlKey || ev.metaKey) && !state.replayMode) {
+    const myUnits = state.selected
+      .map(id => state.entById.get(id))
+      .filter(u => u?.isUnit && u.faction === f && !u.dead && u.dmg > 0);
+    if (myUnits.length) {
+      const forceTarget = getEntAt(tx, ty);
+      if (forceTarget) {
+        if (state.net) {
+          scheduleInput({ action: 'force_attack', ids: myUnits.map(u => u.id), targetId: forceTarget.id, queued: ev.shiftKey });
+        } else {
+          myUnits.forEach(u => orderAttack(u, forceTarget, ev.shiftKey));
+        }
+      } else {
+        if (state.net) {
+          scheduleInput({ action: 'attack_move', ids: myUnits.map(u => u.id), tx, ty, queued: ev.shiftKey });
+        } else {
+          const cols = Math.ceil(Math.sqrt(myUnits.length));
+          myUnits.forEach((u, i) => {
+            const offX = (i % cols) - Math.floor(cols / 2);
+            const offY = Math.floor(i / cols) - Math.floor(cols / 2);
+            orderAttackMove(u, tx + offX, ty + offY, ev.shiftKey);
+          });
+        }
+        state.moveIndicators.push({ wx: tx * TS + TS / 2, wy: ty * TS + TS / 2, t: 30 });
+      }
+      return;
+    }
+  }
+
   const clicked = getEntAt(tx, ty);
   const now = Date.now();
 
@@ -237,6 +297,7 @@ function onClick(ev) {
 
 function onRightClick(ev) {
   ev.preventDefault();
+  if (ev.ctrlKey || ev.metaKey) return;
   if (!state.gameStarted || state.gameOver) return;
   if (state.replayMode) return;
 
@@ -335,7 +396,6 @@ function onRightClick(ev) {
       state.moveIndicators.push({ wx, wy, t: 60 });
       return;
     }
-    import('./game.js').then(m => m.togglePause());
     return;
   }
 
@@ -396,6 +456,7 @@ function onKey(ev) {
     if (state.paused) { import('./game.js').then(m => m.togglePause()); return; }
     if (state.atkMoveMode) { state.atkMoveMode = false; state.canvas.style.cursor = 'default'; return; }
     if (state.patrolMode) { state.patrolMode = false; state.canvas.style.cursor = 'default'; return; }
+    if (state.forceAtkMode) { state.forceAtkMode = false; state.canvas.style.cursor = 'default'; return; }
     if (state.buildMode || state.repairMode || state.sellMode) {
       state.buildMode = null; state.buildReady = false; clearModes(); updateBuildPanel(); return;
     }
@@ -443,7 +504,7 @@ function onKey(ev) {
         const u = state.entById.get(id);
         return u?.isUnit && u.faction === state.playerFaction && !u.dead && u.dmg > 0;
       });
-      if (hasAttackers) { state.atkMoveMode = true; state.canvas.style.cursor = 'crosshair'; }
+      if (hasAttackers) { state.atkMoveMode = true; state.canvas.style.cursor = RED_CURSOR; }
     }
     // Patrol mode: P key
     if ((ev.key === 'p' || ev.key === 'P') && !ev.ctrlKey && !ev.metaKey && !state.paused) {
@@ -495,6 +556,12 @@ function onKey(ev) {
             setMsg('No space to deploy — move MCV to open ground', 150);
           }
         }
+      } else {
+        const hasAttackers = state.selected.some(id => {
+          const u = state.entById.get(id);
+          return u?.isUnit && u.faction === state.playerFaction && !u.dead && u.dmg > 0;
+        });
+        if (hasAttackers) { state.forceAtkMode = true; state.canvas.style.cursor = RED_CURSOR; }
       }
     }
     if (ev.key === 'b' || ev.key === 'B') switchTab('build');

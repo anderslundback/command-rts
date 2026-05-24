@@ -128,11 +128,10 @@ export function makeAI(f) {
 
     _pickTarget() {
       const enemies = state.entities.filter(e => !e.dead && e.faction !== this.f);
+      const combatUnits = enemies.filter(e => e.isUnit && e.dmg > 0 && e.type !== 'harvester');
+      if (combatUnits.length) return combatUnits[(state.rng() * combatUnits.length) | 0];
       const harvesters = enemies.filter(e => e.isUnit && e.type === 'harvester');
       if (harvesters.length) return harvesters[(state.rng() * harvesters.length) | 0];
-      const enemyUnits = enemies.filter(e => e.isUnit &&
-        (e.type === 'rifleman' || e.type === 'rocketeer' || e.type === 'tank' || e.type === 'scout'));
-      if (enemyUnits.length) return enemyUnits[(state.rng() * enemyUnits.length) | 0];
       const buildings = enemies.filter(e => e.isBuilding);
       for (const type of ['refinery', 'command', 'factory', 'barracks']) {
         const b = buildings.find(b => b.type === type);
