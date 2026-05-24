@@ -107,8 +107,13 @@ net.on('error', msg => {
 });
 
 // Desync detected by server
-net.on('desync', () => {
+net.on('desync', msg => {
   uiStore.setState({ desync: true });
+  if (state.syncDebug) {
+    state.syncDebug.resyncs++;
+    state.syncDebug.lastDesyncTick = msg.tick ?? 0;
+    state.syncDebug.diverged = msg.diverged ?? [];
+  }
 });
 
 // Latency measurement

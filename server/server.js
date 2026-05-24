@@ -223,16 +223,26 @@ wss.on('connection', ws => {
         room.hashes ??= {};
         room.canonicalTick ??= 0;
         room.hashes[msg.tick] ??= {};
-        room.hashes[msg.tick][meta.slot] = msg.hash;
-        const vals = Object.values(room.hashes[msg.tick]);
+        room.hashes[msg.tick][meta.slot] = { hash: msg.hash, debug: msg.debug ?? null };
+        const entries = Object.values(room.hashes[msg.tick]);
         const humanCount = room.players.filter(p => !p.isAI && !p.isEmpty).length;
-        if (vals.length >= humanCount) {
-          if (vals.every(h => h === vals[0])) {
+        if (entries.length >= humanCount) {
+          const hashes = entries.map(e => e.hash);
+          if (hashes.every(h => h === hashes[0])) {
             room.canonicalTick = Math.max(room.canonicalTick, msg.tick);
           } else {
-            broadcast(room, { type: 'desync', tick: msg.tick });
-            if (!room._resyncing) {
+            // Find which components diverged
+            const debugEntries = entries.map(e => e.debug).filter(Boolean);
+            const diverged = debugEntries.length >= 2
+              ? ['entityH', 'creditsH', 'rngH', 'shellH'].filter(
+                  k => !debugEntries.every(d => d[k] === debugEntries[0][k])
+                )
+              : [];
+            broadcast(room, { type: 'desync', tick: msg.tick, diverged });
+            // Rate-limit: at most one resync per 100 ticks
+            if (!room._resyncing && (!room._lastResyncTick || msg.tick > room._lastResyncTick + 100)) {
               room._resyncing = true;
+              room._lastResyncTick = msg.tick;
               broadcast(room, { type: 'resync_request', canonicalTick: room.canonicalTick, sourceSlot: 0 });
             }
           }

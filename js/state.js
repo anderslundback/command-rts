@@ -69,4 +69,5 @@ export const state = {
   _lastGroupTime: 0,
   damageNumbers: [],
   underAttackTimer: 0,
+  syncDebug: null, // populated during net games: { entityH, creditsH, rngH, shellH, tick, resyncs, lastDesyncTick, diverged }
 };

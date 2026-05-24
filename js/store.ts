@@ -76,6 +76,19 @@ export interface NetState {
   latencyMs: number;
 }
 
+// ── Sync debug ───────────────────────────────────────────────────────────────
+
+export interface SyncDebugState {
+  entityH: number;
+  creditsH: number;
+  rngH: number;
+  shellH: number;
+  tick: number;
+  resyncs: number;
+  lastDesyncTick: number;
+  diverged: string[];
+}
+
 // ── Store shape ──────────────────────────────────────────────────────────────
 
 export interface PowerPoint {
@@ -119,6 +132,7 @@ export interface UIState {
   replayMode: boolean;
   desync: boolean;
   netStall: boolean;
+  syncDebug: SyncDebugState | null;
 }
 
 // ── Initial state ────────────────────────────────────────────────────────────
@@ -152,6 +166,7 @@ const initialState: UIState = {
   replayMode: false,
   desync: false,
   netStall: false,
+  syncDebug: null,
 };
 
 // ── Zustand vanilla store ────────────────────────────────────────────────────
@@ -257,5 +272,6 @@ export function syncFromGameState(): void {
     primaryBuilding: { ...s.primaryBuilding },
     replayMode: s.replayMode ?? false,
     netStall: !!(s.rollback?._stallStart != null),
+    syncDebug: s.syncDebug ? { ...s.syncDebug } : null,
   });
 }

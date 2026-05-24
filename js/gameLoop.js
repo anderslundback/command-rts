@@ -165,7 +165,13 @@ function gameTick() {
   }
 
   if (state.rollback && !state.isRollingBack && state.tick % 20 === 0) {
-    net.send({ type: 'state_hash', tick: state.tick, hash: entityHash(state.entities, state) });
+    const entityH = entityHash(state.entities);
+    const creditsH = ((Math.round(state.credits[0]) * 31337) ^ (Math.round(state.credits[1]) * 62674) ^ (Math.round(state.credits[2]) * 94011)) >>> 0;
+    const rngH = state.rng.getState() >>> 0;
+    const shellH = state.shells.length;
+    const fullHash = entityHash(state.entities, state);
+    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, tick: state.tick });
+    net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH } });
   }
 }
 

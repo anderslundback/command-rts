@@ -1,5 +1,5 @@
 import React from 'react';
-import { useUIStore } from '../store';
+import { useUIStore, SyncDebugState } from '../store';
 // @ts-ignore
 import { FDATA } from '../constants.js';
 
@@ -18,11 +18,13 @@ export function HUD(): React.ReactElement {
   const replayMode = useUIStore(s => s.replayMode);
   const desync = useUIStore(s => s.desync);
   const netStall = useUIStore(s => s.netStall);
+  const syncDebug = useUIStore(s => s.syncDebug);
 
   const fd = FDATA[playerFaction] as { name: string; color: string };
   const powerOk = powerGen >= powerUsed;
 
   return (
+    <>
     <div
       style={{
         position: 'fixed',
@@ -131,6 +133,45 @@ export function HUD(): React.ReactElement {
 
       {/* FPS counter */}
       <span style={{ color: '#445', fontSize: 10 }}>{fps} FPS</span>
+    </div>
+    {syncDebug && netState.role !== 'none' && <SyncDebugPanel debug={syncDebug} />}
+    </>
+  );
+}
+
+function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElement {
+  const { entityH, creditsH, rngH, shellH, tick, resyncs, lastDesyncTick, diverged } = debug;
+  const hex = (n: number) => '0x' + (n >>> 0).toString(16).toUpperCase().padStart(8, '0');
+  const diff = (k: string) => diverged.includes(k);
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: 8,
+      left: 8,
+      background: 'rgba(0,0,0,0.82)',
+      border: '1px solid #1a2230',
+      padding: '6px 10px',
+      fontFamily: 'monospace',
+      fontSize: 10,
+      color: '#8ab',
+      lineHeight: 1.7,
+      zIndex: 30,
+      pointerEvents: 'none',
+      userSelect: 'none',
+    }}>
+      <div style={{ color: '#334', marginBottom: 2, letterSpacing: 1 }}>SYNC DEBUG</div>
+      <div>tick {tick}{'  '}resyncs: <span style={{ color: resyncs > 0 ? '#f44' : '#8ab' }}>{resyncs}</span></div>
+      {resyncs > 0 && <div style={{ color: '#556' }}>last desync t{lastDesyncTick}</div>}
+      {(['entityH', 'creditsH', 'rngH', 'shellH'] as const).map(k => {
+        const val = { entityH, creditsH, rngH, shellH }[k];
+        const label = { entityH: 'entity ', creditsH: 'credits', rngH: 'rng    ', shellH: 'shells ' }[k];
+        const isDiff = diff(k);
+        return (
+          <div key={k} style={{ color: isDiff ? '#f44' : '#8ab' }}>
+            {label}{'  '}{hex(val)}{isDiff ? '  ◄ DIFF' : ''}
+          </div>
+        );
+      })}
     </div>
   );
 }

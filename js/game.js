@@ -53,6 +53,7 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
   }
   state.rollback = { buffer: new Array(256).fill(null), inputHistory: {}, predictions: {}, humanSlots, _stallStart: null };
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
+  state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [] };
   _resetGameState(myFaction, [1000, 2000, 2000]);
 
   genMapFromSeed(mapSeed);
