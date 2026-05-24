@@ -6,7 +6,7 @@ import { T } from './constants.js';
 import { astar } from './pathfinding.js';
 import { canPlace, placeBuilding, deployMcvInPlace } from './placement.js';
 import { nearestRefinery, calcPower } from './resources.js';
-import { orderMove, orderAttack, orderHarvest } from './orders.js';
+import { orderMove, orderAttack, orderAttackMove, orderHarvest } from './orders.js';
 import { setMsg, updateBuildPanel, switchTab } from './hud.js';
 import { scheduleInput } from './net/netClient.js';
 
@@ -107,6 +107,27 @@ function onClick(ev) {
   const ty = Math.floor((ev.clientY - r.top  + state.cam.y) / TS);
   const f  = state.playerFaction;
 
+  if (state.replayMode) return;
+
+  if (state.atkMoveMode) {
+    const myUnits = state.selected.map(id => state.entById.get(id)).filter(u => u?.isUnit && u.faction === f && !u.dead);
+    if (myUnits.length) {
+      if (state.net) {
+        scheduleInput({ action: 'attack_move', ids: myUnits.map(u => u.id), tx, ty, queued: ev.shiftKey });
+      } else {
+        const cols = Math.ceil(Math.sqrt(myUnits.length));
+        myUnits.forEach((u, i) => {
+          const offX = (i % cols) - Math.floor(cols / 2);
+          const offY = Math.floor(i / cols) - Math.floor(cols / 2);
+          orderAttackMove(u, tx + offX, ty + offY, ev.shiftKey);
+        });
+      }
+      state.moveIndicators.push({ wx: tx * TS + TS / 2, wy: ty * TS + TS / 2, t: 30 });
+    }
+    if (!ev.shiftKey) { state.atkMoveMode = false; state.canvas.style.cursor = 'default'; }
+    return;
+  }
+
   if (state.repairMode) {
     const clicked = getEntAt(tx, ty);
     if (clicked?.isBuilding && clicked.faction === f && clicked.done) {
@@ -198,6 +219,7 @@ function onClick(ev) {
 function onRightClick(ev) {
   ev.preventDefault();
   if (!state.gameStarted || state.gameOver) return;
+  if (state.replayMode) return;
 
   if (state.paused) {
     const f = state.playerFaction;
@@ -284,9 +306,9 @@ function onRightClick(ev) {
   if (target && target.faction !== f) {
     const attackers = myUnits.filter(u => u.dmg > 0);
     if (state.net) {
-      if (attackers.length) scheduleInput({ action: 'attack', ids: attackers.map(u => u.id), targetId: target.id });
+      if (attackers.length) scheduleInput({ action: 'attack', ids: attackers.map(u => u.id), targetId: target.id, queued: ev.shiftKey });
     } else {
-      attackers.forEach(u => orderAttack(u, target));
+      attackers.forEach(u => orderAttack(u, target, ev.shiftKey));
     }
   } else if (target?.isBuilding && target.faction === f && target.type === 'refinery') {
     const harvesters = myUnits.filter(u => u.type === 'harvester');
@@ -315,13 +337,13 @@ function onRightClick(ev) {
     }
   } else {
     if (state.net) {
-      if (myUnits.length) scheduleInput({ action: 'move', ids: myUnits.map(u => u.id), tx, ty });
+      if (myUnits.length) scheduleInput({ action: 'move', ids: myUnits.map(u => u.id), tx, ty, queued: ev.shiftKey });
     } else {
       const cols = Math.ceil(Math.sqrt(myUnits.length));
       myUnits.forEach((u, i) => {
         const offX = (i % cols) - Math.floor(cols / 2);
         const offY = Math.floor(i / cols) - Math.floor(cols / 2);
-        orderMove(u, tx + offX, ty + offY);
+        orderMove(u, tx + offX, ty + offY, ev.shiftKey);
       });
     }
     state.moveIndicators.push({ wx, wy, t: 30 });
@@ -334,6 +356,11 @@ function onKey(ev) {
   const SPD = 80;
   if (ev.key === 'Escape') {
     if (state.paused) { import('./game.js').then(m => m.togglePause()); return; }
+    if (state.atkMoveMode) {
+      state.atkMoveMode = false;
+      state.canvas.style.cursor = 'default';
+      return;
+    }
     if (state.buildMode || state.repairMode || state.sellMode) {
       state.buildMode = null;
       state.buildReady = false;
@@ -351,49 +378,92 @@ function onKey(ev) {
   if (ev.key === 'ArrowRight') state.cam.x += SPD;
   if (ev.key === 'ArrowUp')    state.cam.y -= SPD;
   if (ev.key === 'ArrowDown')  state.cam.y += SPD;
-  if (ev.key === 'h' || ev.key === 'H') {
-    const cmd = state.entities.find(e => !e.dead && e.isBuilding && e.faction === state.playerFaction && e.type === 'command');
-    if (cmd) { state.cam.x = cmd.x * TS - state.canvas.width / 2; state.cam.y = cmd.y * TS - state.canvas.height / 2; }
-  }
-  if ((ev.ctrlKey || ev.metaKey) && ev.key === 'a') {
-    ev.preventDefault();
-    state.selected = state.entities.filter(e => !e.dead && e.isUnit && e.faction === state.playerFaction).map(e => e.id);
-    updateBuildPanel();
-  }
-  if (ev.key === 's' || ev.key === 'S') {
-    const ids = state.selected.filter(id => {
-      const u = state.entities.find(e => e.id === id);
-      return u?.isUnit && u.faction === state.playerFaction;
-    });
-    if (state.net) {
-      if (ids.length) scheduleInput({ action: 'stop', ids });
-    } else {
-      ids.forEach(id => {
-        const u = state.entities.find(e => e.id === id);
-        if (u) { u.state = 'idle'; u.path = []; u.target = null; }
+  if (!state.replayMode) {
+    // Control groups: Ctrl+1-9 assign, 1-9 recall (double-tap to center camera)
+    const digit = parseInt(ev.key, 10);
+    if (digit >= 1 && digit <= 9) {
+      if (ev.ctrlKey && !ev.metaKey) {
+        ev.preventDefault();
+        state.controlGroups[digit - 1] = [...state.selected];
+        setMsg('Group ' + digit + ' assigned', 60);
+        updateBuildPanel();
+      } else if (!ev.ctrlKey && !ev.metaKey) {
+        const group = state.controlGroups[digit - 1].filter(id => {
+          const e = state.entById.get(id);
+          return e && !e.dead;
+        });
+        state.controlGroups[digit - 1] = group;
+        state.selected = [...group];
+        const now = Date.now();
+        if (state._lastGroupKey === digit && now - state._lastGroupTime < 400 && group.length) {
+          const first = state.entById.get(group[0]);
+          if (first) {
+            state.cam.x = first.px - state.canvas.width / 2;
+            state.cam.y = first.py - state.canvas.height / 2;
+            clampCam();
+          }
+        }
+        state._lastGroupKey = digit;
+        state._lastGroupTime = now;
+        updateBuildPanel();
+      }
+    }
+
+    // Attack-move mode: A key
+    if ((ev.key === 'a' || ev.key === 'A') && !ev.ctrlKey && !ev.metaKey && !state.paused) {
+      const hasAttackers = state.selected.some(id => {
+        const u = state.entById.get(id);
+        return u?.isUnit && u.faction === state.playerFaction && !u.dead && u.dmg > 0;
       });
+      if (hasAttackers) { state.atkMoveMode = true; state.canvas.style.cursor = 'crosshair'; }
     }
   }
-  if (ev.key === 'f' || ev.key === 'F') {
-    const mcv = state.entities.find(e => !e.dead && e.isUnit && e.type === 'mcv' &&
-      e.faction === state.playerFaction && state.selected.includes(e.id));
-    if (mcv) {
+
+  if (!state.replayMode) {
+    if (ev.key === 'h' || ev.key === 'H') {
+      const cmd = state.entities.find(e => !e.dead && e.isBuilding && e.faction === state.playerFaction && e.type === 'command');
+      if (cmd) { state.cam.x = cmd.x * TS - state.canvas.width / 2; state.cam.y = cmd.y * TS - state.canvas.height / 2; }
+    }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === 'a') {
+      ev.preventDefault();
+      state.selected = state.entities.filter(e => !e.dead && e.isUnit && e.faction === state.playerFaction).map(e => e.id);
+      updateBuildPanel();
+    }
+    if (ev.key === 's' || ev.key === 'S') {
+      const ids = state.selected.filter(id => {
+        const u = state.entities.find(e => e.id === id);
+        return u?.isUnit && u.faction === state.playerFaction;
+      });
       if (state.net) {
-        scheduleInput({ action: 'deploy_mcv', unitId: mcv.id });
+        if (ids.length) scheduleInput({ action: 'stop', ids });
       } else {
-        const b = deployMcvInPlace(mcv);
-        if (b) {
-          state.selected = [b.id];
-          setMsg('MCV deployed — Command Center established', 180);
-          updateBuildPanel();
+        ids.forEach(id => {
+          const u = state.entities.find(e => e.id === id);
+          if (u) { u.state = 'idle'; u.path = []; u.target = null; }
+        });
+      }
+    }
+    if (ev.key === 'f' || ev.key === 'F') {
+      const mcv = state.entities.find(e => !e.dead && e.isUnit && e.type === 'mcv' &&
+        e.faction === state.playerFaction && state.selected.includes(e.id));
+      if (mcv) {
+        if (state.net) {
+          scheduleInput({ action: 'deploy_mcv', unitId: mcv.id });
         } else {
-          setMsg('No space to deploy — move MCV to open ground', 150);
+          const b = deployMcvInPlace(mcv);
+          if (b) {
+            state.selected = [b.id];
+            setMsg('MCV deployed — Command Center established', 180);
+            updateBuildPanel();
+          } else {
+            setMsg('No space to deploy — move MCV to open ground', 150);
+          }
         }
       }
     }
+    if (ev.key === 'b' || ev.key === 'B') switchTab('build');
+    if (ev.key === 't' || ev.key === 'T') switchTab('train');
   }
-  if (ev.key === 'b' || ev.key === 'B') switchTab('build');
-  if (ev.key === 't' || ev.key === 'T') switchTab('train');
   clampCam();
 }
 

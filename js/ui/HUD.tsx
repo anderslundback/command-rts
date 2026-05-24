@@ -15,6 +15,7 @@ export function HUD(): React.ReactElement {
   const gameSpeed = useUIStore(s => s.gameSpeed);
   const netState = useUIStore(s => s.net);
   const lobby = useUIStore(s => s.lobby);
+  const replayMode = useUIStore(s => s.replayMode);
 
   const fd = FDATA[playerFaction] as { name: string; color: string };
   const powerOk = powerGen >= powerUsed;
@@ -66,6 +67,13 @@ export function HUD(): React.ReactElement {
           {powerUsed}/{powerGen}
         </span>
       </span>
+
+      {/* Replay badge */}
+      {replayMode && (
+        <span style={{ color: '#f90', fontSize: 10, letterSpacing: 2, fontWeight: 'bold', border: '1px solid #f90', padding: '1px 6px' }}>
+          REPLAY
+        </span>
+      )}
 
       {/* Status message */}
       {statusMsg && (

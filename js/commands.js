@@ -1,18 +1,21 @@
 import { BDEF, UDEF } from './constants.js';
 import { state } from './state.js';
-import { orderMove, orderAttack, orderStop, orderHarvest } from './orders.js';
+import { orderMove, orderAttack, orderAttackMove, orderStop, orderHarvest } from './orders.js';
 import { placeBuilding, deployMcvInPlace } from './placement.js';
 
 export function applyCommand(cmd) {
   switch (cmd.action) {
     case 'move':
-      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && !u.dead) orderMove(u, cmd.tx, cmd.ty); }
+      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && !u.dead) orderMove(u, cmd.tx, cmd.ty, cmd.queued); }
       break;
     case 'attack': {
       const t = state.entById.get(cmd.targetId);
-      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && t && !u.dead) orderAttack(u, t); }
+      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && t && !u.dead) orderAttack(u, t, cmd.queued); }
       break;
     }
+    case 'attack_move':
+      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && !u.dead) orderAttackMove(u, cmd.tx, cmd.ty, cmd.queued); }
+      break;
     case 'stop':
       for (const id of cmd.ids) { const u = state.entById.get(id); if (u) orderStop(u); }
       break;

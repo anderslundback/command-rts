@@ -34,6 +34,8 @@ function snapshotEnt(e) {
     trainQ: e.trainQ ? e.trainQ.map(q => ({ ...q })) : null,
     harvestTile: e.harvestTile ? { ...e.harvestTile } : null,
     waypoint: e.waypoint ? { ...e.waypoint } : null,
+    orderQueue: e.orderQueue ? e.orderQueue.map(o => ({ ...o })) : [],
+    atkMoveDest: e.atkMoveDest ? { ...e.atkMoveDest } : null,
   });
 }
 
@@ -65,6 +67,8 @@ function restoreEnt(s) {
   delete e._isBuilding;
   if (s.path) e.path = [...s.path];
   if (s.trainQ) e.trainQ = s.trainQ.map(q => ({ ...q }));
+  e.orderQueue = s.orderQueue ? s.orderQueue.map(o => ({ ...o })) : [];
+  if (s.atkMoveDest) e.atkMoveDest = { ...s.atkMoveDest };
   return e;
 }
 

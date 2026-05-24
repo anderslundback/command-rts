@@ -50,7 +50,7 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
   state.rng = makeLCG(mapSeed);
   // Rollback buffer: 8 snapshots at 20Hz = 400ms of history
   state.rollback = { buffer: new Array(8).fill(null), inputHistory: {}, predictions: {} };
-  state.net = { myFaction, mySlot, slotFactions };
+  state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
   _resetGameState(myFaction, [1000, 2000, 2000]);
 
   genMapFromSeed(mapSeed);
@@ -171,6 +171,13 @@ export function _gameTick() { gameTick(); }
 
 function gameTick() {
   state.tick++;
+
+  // Auto-pause at end of replay
+  if (state.replayMode && state.tick >= state._replayEndTick) {
+    state.paused = true;
+    syncFromGameState();
+    return;
+  }
 
   // Snapshot unit positions before simulation for sub-tick render interpolation.
   for (const e of state.entities) {
@@ -294,6 +301,12 @@ function _resetGameState(playerFaction, startCredits) {
   state.oreHistory = new Set();
   state.fpsLastTime = 0;
   state.fpsSmooth = 60;
+  state.controlGroups = [[], [], [], [], [], [], [], [], []];
+  state.atkMoveMode = false;
+  state.replayMode = false;
+  state._replayEndTick = 0;
+  state._lastGroupKey = -1;
+  state._lastGroupTime = 0;
   resetEid();
 }
 
@@ -355,12 +368,73 @@ function checkVictory() {
   speak(alive[state.playerFaction] ? 'Mission accomplished. Victory!' : 'Mission failed.');
 }
 
+// ── Replay save/load ──────────────────────────────────────────────────────────
+
+export function saveReplay() {
+  if (!state.rollback || !state.net) return;
+  const { mapSeed, slotFactions, aiSlots } = state.net;
+  const compactInputs = {};
+  for (const [tick, slots] of Object.entries(state.rollback.inputHistory)) {
+    const nonNull = {};
+    for (const [slot, cmd] of Object.entries(slots)) { if (cmd != null) nonNull[slot] = cmd; }
+    if (Object.keys(nonNull).length) compactInputs[tick] = nonNull;
+  }
+  const data = { version: 1, endTick: state.tick, mapSeed, slotFactions, aiSlots, inputs: compactInputs };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `replay_${Date.now()}.json`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function startReplay(data) {
+  const { mapSeed, slotFactions, aiSlots, inputs, endTick } = data;
+  const myFaction = slotFactions[0] ?? 0;
+  const mySlot = 0;
+  state.rng = makeLCG(mapSeed);
+  state.rollback = { buffer: new Array(8).fill(null), inputHistory: {}, predictions: {} };
+  // Pre-populate input history from replay data
+  for (const [tick, slots] of Object.entries(inputs)) {
+    state.rollback.inputHistory[tick] = {};
+    for (const [slot, cmd] of Object.entries(slots)) {
+      state.rollback.inputHistory[tick][slot] = cmd;
+    }
+  }
+  state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
+  state.replayMode = true;
+  state._replayEndTick = endTick;
+  _resetGameState(myFaction, [1000, 2000, 2000]);
+  // Re-set replayMode because _resetGameState clears it
+  state.replayMode = true;
+  state._replayEndTick = endTick;
+  state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
+  genMapFromSeed(mapSeed);
+  _populateOreHistory();
+  state.AI = [null, null, null];
+  for (let i = 0; i < 3; i++) {
+    if (aiSlots[i] && slotFactions[i] != null) state.AI[slotFactions[i]] = makeAI(slotFactions[i]);
+  }
+  _placeStartingEntities(slotFactions);
+  for (let f = 0; f < 3; f++) {
+    if (!slotFactions.includes(f)) state.factionEliminated[f] = true;
+  }
+  calcPower();
+  initFog();
+  updateFog();
+  recordPower();
+  _centerCamOn(mySlot);
+  syncFromGameState();
+  if (state.frameId) { cancelAnimationFrame(state.frameId); clearTimeout(state.frameId); }
+  _accumulator = 0; _lastLoopTime = 0;
+  loop();
+}
+
 // Register callbacks so netClient.js can reach game functions without circular imports
 registerGameCallbacks({
   startNetGame,
   showMenu: () => showMenu(),
   scheduleInput: (cmd) => {
     if (!state.rollback) return;
+    if (state.replayMode) return;
     const nextTick = state.tick + 1;
     state.rollback.inputHistory[nextTick] ??= {};
     state.rollback.inputHistory[nextTick][state.net.mySlot] = cmd;

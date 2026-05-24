@@ -116,6 +116,7 @@ export interface UIState {
   lobby: LobbyState | null;
   net: NetState;
   bootMsg: string;
+  replayMode: boolean;
 }
 
 // ── Initial state ────────────────────────────────────────────────────────────
@@ -146,6 +147,7 @@ const initialState: UIState = {
   lobby: null,
   net: { connected: false, role: 'none', latencyMs: 0 },
   bootMsg: '',
+  replayMode: false,
 };
 
 // ── Zustand vanilla store ────────────────────────────────────────────────────
@@ -249,5 +251,6 @@ export function syncFromGameState(): void {
     sel,
     trainQueues,
     primaryBuilding: { ...s.primaryBuilding },
+    replayMode: s.replayMode ?? false,
   });
 }

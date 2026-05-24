@@ -59,4 +59,10 @@ export const state = {
   rng: null, // seeded PRNG — set by startGame/startNetGame; all game-logic randomness must use this
   isRollingBack: false,
   rollback: null, // set by startNetGame; { buffer, inputHistory, predictions }
+  controlGroups: [[], [], [], [], [], [], [], [], []],
+  atkMoveMode: false,
+  replayMode: false,
+  _replayEndTick: 0,
+  _lastGroupKey: -1,
+  _lastGroupTime: 0,
 };

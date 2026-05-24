@@ -5,7 +5,7 @@ import { BuildPanel } from './BuildPanel';
 // @ts-ignore
 import * as _S from '../state.js';
 // @ts-ignore
-import { onRadarClick } from '../input.js';
+import { onRadarClick, clampCam } from '../input.js';
 const state: any = (_S as any).state;
 
 export function Sidebar(): React.ReactElement {
@@ -16,13 +16,33 @@ export function Sidebar(): React.ReactElement {
 
   // Wire the radar canvas into the game state so renderer can draw to it
   useEffect(() => {
-    if (radarRef.current) {
-      (state as any).radar = radarRef.current;
-      (state as any).radarCtx = radarRef.current.getContext('2d');
-      radarRef.current.addEventListener('click', onRadarClick);
-    }
+    if (!radarRef.current) return;
+    (state as any).radar = radarRef.current;
+    (state as any).radarCtx = radarRef.current.getContext('2d');
+    radarRef.current.addEventListener('click', onRadarClick);
+
+    let dragging = false;
+    const onDown = () => { dragging = true; };
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging || !radarRef.current) return;
+      const r = radarRef.current.getBoundingClientRect();
+      const wx = ((ev.clientX - r.left) / radarRef.current.width) * (80 * 32);
+      const wy = ((ev.clientY - r.top) / radarRef.current.height) * (60 * 32);
+      state.cam.x = wx - (state.canvas?.width ?? 800) / 2;
+      state.cam.y = wy - (state.canvas?.height ?? 600) / 2;
+      (clampCam as any)();
+    };
+    const onUp = () => { dragging = false; };
+    radarRef.current.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+
+    const radar = radarRef.current;
     return () => {
-      if (radarRef.current) radarRef.current.removeEventListener('click', onRadarClick);
+      radar.removeEventListener('click', onRadarClick);
+      radar.removeEventListener('mousedown', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
     };
   }, []);
 

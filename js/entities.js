@@ -66,6 +66,8 @@ export class Unit extends Ent {
     this.ore = 0;
     this.maxOre = 90;
     this.facing = 0;
+    this.orderQueue = [];
+    this.atkMoveDest = null;
   }
 }
 

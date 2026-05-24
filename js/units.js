@@ -7,7 +7,7 @@ import { astar, adjTile, adjToBuilding, distToEnt } from './pathfinding.js';
 import { nearestRefinery, hasPwr } from './resources.js';
 import { dealDmg, dealSplash, autoAttack } from './combat.js';
 import { spawnShell } from './shells.js';
-import { orderHarvest } from './orders.js';
+import { orderHarvest, orderMove, orderAttack, orderAttackMove } from './orders.js';
 import { playShot, playCash } from './audio.js';
 
 const VEHICLE_TYPES = new Set(['tank', 'harvester', 'mcv', 'scout', 'aatrack', 'artillery', 'v2rocket', 'tomahawk']);
@@ -47,12 +47,43 @@ export function updateUnit(u) {
 
     case 'move':
       stepPath(u);
-      if (!u.path.length) u.state = 'idle';
+      if (!u.path.length) dequeueNext(u);
       break;
+
+    case 'attack_move': {
+      // Scan for nearest enemy in range
+      let nearest = null;
+      let nearestDist = Infinity;
+      for (const e of state.entities) {
+        if (!e.dead && e.faction !== u.faction) {
+          const d = distToEnt(u, e);
+          if (d < u.range + 0.5 && d < nearestDist && u.dmg > 0) {
+            nearest = e; nearestDist = d;
+          }
+        }
+      }
+      if (nearest) {
+        u.state = 'attack'; u.target = nearest.id; u.path = [];
+      } else {
+        stepPath(u);
+        if (!u.path.length) { u.atkMoveDest = null; dequeueNext(u); }
+      }
+      break;
+    }
 
     case 'attack': {
       const tgt = getEnt(u.target);
-      if (!tgt || tgt.dead) { u.state = 'idle'; u.target = null; break; }
+      if (!tgt || tgt.dead) {
+        u.target = null;
+        if (u.atkMoveDest) {
+          u.state = 'attack_move';
+          u.path = astar(u.x, u.y, u.atkMoveDest.tx, u.atkMoveDest.ty, false);
+          u.mprog = 0;
+        } else {
+          dequeueNext(u);
+        }
+        break;
+      }
       const dist = distToEnt(u, tgt);
       if (tgt) {
         const tx = (tgt.isBuilding ? tgt.x + tgt.w / 2 : tgt.x) * TS;
@@ -139,6 +170,22 @@ export function updateUnit(u) {
   }
 }
 
+// ── Order queue ───────────────────────────────────────────────────────────────
+
+function dequeueNext(u) {
+  const next = u.orderQueue?.shift();
+  if (!next) { u.state = 'idle'; return; }
+  if (next.action === 'move') orderMove(u, next.tx, next.ty);
+  else if (next.action === 'attack_move') orderAttackMove(u, next.tx, next.ty);
+  else if (next.action === 'attack') {
+    const t = getEnt(next.targetId);
+    if (t && !t.dead) orderAttack(u, t);
+    else dequeueNext(u);
+  } else {
+    u.state = 'idle';
+  }
+}
+
 // ── Air unit logic ────────────────────────────────────────────────────────────
 
 function updateAirUnit(u) {
@@ -151,9 +198,47 @@ function updateAirUnit(u) {
       if (u.destPx !== undefined) moveAirToward(u, u.destPx, u.destPy);
       else u.state = 'idle';
       break;
+    case 'attack_move': {
+      let nearest = null;
+      let nearestDist = Infinity;
+      for (const e of state.entities) {
+        if (!e.dead && e.faction !== u.faction) {
+          const d = distToEnt(u, e);
+          if (d < u.range + 0.5 && d < nearestDist && u.dmg > 0) {
+            nearest = e; nearestDist = d;
+          }
+        }
+      }
+      if (nearest) {
+        u.state = 'attack'; u.target = nearest.id;
+      } else if (u.destPx !== undefined) {
+        const cx = u.px + TS / 2, cy = u.py + TS / 2;
+        const dx = u.destPx - cx, dy = u.destPy - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < u.speed * 1.5) {
+          u.state = 'idle'; u.atkMoveDest = null; u.destPx = undefined;
+          dequeueNext(u);
+        } else {
+          u.facing = Math.atan2(dy, dx);
+          u.px += (dx / dist) * u.speed;
+          u.py += (dy / dist) * u.speed;
+          u.x = (u.px / TS) | 0;
+          u.y = (u.py / TS) | 0;
+        }
+      } else {
+        u.state = 'idle'; u.atkMoveDest = null;
+        dequeueNext(u);
+      }
+      break;
+    }
     case 'attack': {
       const tgt = getEnt(u.target);
-      if (!tgt || tgt.dead) { u.state = 'idle'; u.target = null; break; }
+      if (!tgt || tgt.dead) {
+        u.target = null;
+        if (u.atkMoveDest) { u.state = 'attack_move'; }
+        else { dequeueNext(u); }
+        break;
+      }
       const dist = distToEnt(u, tgt);
       const tx = (tgt.isBuilding ? tgt.x + tgt.w / 2 : tgt.x) * TS;
       const ty = (tgt.isBuilding ? tgt.y + tgt.h / 2 : tgt.y) * TS;

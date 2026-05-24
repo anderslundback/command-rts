@@ -5,7 +5,13 @@ import { nearestRefinery } from './resources.js';
 
 import { TS } from './constants.js';
 
-export function orderMove(u, tx, ty) {
+export function orderMove(u, tx, ty, queued = false) {
+  if (queued) {
+    (u.orderQueue ??= []).push({ action: 'move', tx, ty });
+    return;
+  }
+  u.orderQueue = [];
+  u.atkMoveDest = null;
   if (u.armorType === 'air') {
     u.destPx = tx * TS + TS / 2;
     u.destPy = ty * TS + TS / 2;
@@ -19,10 +25,36 @@ export function orderMove(u, tx, ty) {
   u.mprog = 0;
 }
 
-export function orderAttack(u, target) {
+export function orderAttack(u, target, queued = false) {
+  if (queued) {
+    (u.orderQueue ??= []).push({ action: 'attack', targetId: target.id });
+    return;
+  }
+  u.orderQueue = [];
+  u.atkMoveDest = null;
   u.state = 'attack';
   u.target = target.id;
   if (u.armorType !== 'air') u.path = [];
+}
+
+export function orderAttackMove(u, tx, ty, queued = false) {
+  if (queued) {
+    (u.orderQueue ??= []).push({ action: 'attack_move', tx, ty });
+    return;
+  }
+  u.orderQueue = [];
+  u.atkMoveDest = { tx, ty };
+  if (u.armorType === 'air') {
+    u.destPx = tx * TS + TS / 2;
+    u.destPy = ty * TS + TS / 2;
+    u.target = null;
+    u.state = 'attack_move';
+  } else {
+    u.state = 'attack_move';
+    u.target = null;
+    u.path = astar(u.x, u.y, tx, ty, false);
+    u.mprog = 0;
+  }
 }
 
 export function orderHarvest(u, refinery) {
@@ -40,6 +72,8 @@ export function orderHarvest(u, refinery) {
 }
 
 export function orderStop(u) {
+  u.orderQueue = [];
+  u.atkMoveDest = null;
   u.state = 'idle';
   u.path = [];
   u.target = null;

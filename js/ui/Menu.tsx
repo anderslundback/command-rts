@@ -4,6 +4,9 @@ import { useUIStore, uiStore } from '../store';
 import { FDATA } from '../constants.js';
 // @ts-ignore
 import { net } from '../net/netClient.js';
+// @ts-ignore
+import { state as _gameState } from '../state.js';
+const _gs: any = _gameState;
 
 declare const __WS_URL__: string;
 
@@ -304,6 +307,35 @@ export function Menu(): React.ReactElement {
                   {label}
                 </button>
               ))}
+              <button
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.json';
+                  input.onchange = () => {
+                    const file = input.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      try {
+                        const data = JSON.parse(reader.result as string);
+                        import('../game.js').then((m: any) => m.startReplay(data)).catch(console.error);
+                      } catch (e) { console.error('Invalid replay file', e); }
+                    };
+                    reader.readAsText(file);
+                  };
+                  input.click();
+                }}
+                style={{
+                  background: '#06080e', border: '2px solid #1a2230', color: '#fa0',
+                  fontFamily: "'Courier New', monospace", fontSize: 14, fontWeight: 'bold',
+                  letterSpacing: 3, padding: '12px 32px', cursor: 'pointer', width: 220,
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#fa0'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1a2230'; }}
+              >
+                WATCH REPLAY
+              </button>
             </div>
           )}
 
@@ -425,23 +457,44 @@ export function Menu(): React.ReactElement {
             ))}
           </div>
 
-          <button
-            onClick={handleReturnToMenu}
-            style={{
-              background: '#06080e',
-              border: '2px solid #1a2230',
-              color: '#8ab',
-              fontFamily: "'Courier New', monospace",
-              fontSize: 13,
-              letterSpacing: 2,
-              padding: '10px 28px',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={e => ((e.target as HTMLButtonElement).style.borderColor = '#4af')}
-            onMouseLeave={e => ((e.target as HTMLButtonElement).style.borderColor = '#1a2230')}
-          >
-            RETURN TO MENU
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {_gs.rollback && (
+              <button
+                onClick={() => { import('../game.js').then((m: any) => m.saveReplay()).catch(console.error); }}
+                style={{
+                  background: '#06080e',
+                  border: '2px solid #1a2230',
+                  color: '#fa0',
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: 13,
+                  letterSpacing: 2,
+                  padding: '10px 28px',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={e => ((e.target as HTMLButtonElement).style.borderColor = '#fa0')}
+                onMouseLeave={e => ((e.target as HTMLButtonElement).style.borderColor = '#1a2230')}
+              >
+                SAVE REPLAY
+              </button>
+            )}
+            <button
+              onClick={handleReturnToMenu}
+              style={{
+                background: '#06080e',
+                border: '2px solid #1a2230',
+                color: '#8ab',
+                fontFamily: "'Courier New', monospace",
+                fontSize: 13,
+                letterSpacing: 2,
+                padding: '10px 28px',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => ((e.target as HTMLButtonElement).style.borderColor = '#4af')}
+              onMouseLeave={e => ((e.target as HTMLButtonElement).style.borderColor = '#1a2230')}
+            >
+              RETURN TO MENU
+            </button>
+          </div>
         </>
       )}
     </div>
