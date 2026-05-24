@@ -84,10 +84,15 @@ wss.on('connection', ws => {
         const room = rooms.get(code);
         if (!room) { send(ws, { type: 'error', reason: 'room_not_found' }); return; }
         if (room.gameStarted) { send(ws, { type: 'error', reason: 'game_in_progress' }); return; }
-        // Only replace AI slots — empty slots (intentionally removed) stay empty
+        // Replace an AI slot first; fall back to an empty (open) slot
         let slot = -1;
         for (const p of room.players) {
           if (p.isAI) { slot = p.slot; break; }
+        }
+        if (slot === -1) {
+          for (const p of room.players) {
+            if (p.isEmpty) { slot = p.slot; break; }
+          }
         }
         if (slot === -1) { send(ws, { type: 'error', reason: 'room_full' }); return; }
 
