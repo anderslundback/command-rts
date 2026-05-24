@@ -12,6 +12,17 @@ export function dealDmg(e, dmg, attacker) {
   }
   e.hp -= actualDmg;
   e.hitFlash = 8;
+  if (!state.isRollingBack) {
+    const epx = e.isBuilding ? (e.x + e.w / 2) * TS : e.px + TS / 2;
+    const epy = e.isBuilding ? (e.y + e.h / 2) * TS : e.py + TS / 2;
+    state.damageNumbers.push({ x: epx, y: epy, val: actualDmg, age: 0 });
+    if (e.isBuilding && e.faction === state.playerFaction && state.canvas) {
+      const bpx = e.x * TS, bpy = e.y * TS, bpw = e.w * TS, bph = e.h * TS;
+      const onScreen = bpx + bpw > state.cam.x && bpx < state.cam.x + state.canvas.width
+                    && bpy + bph > state.cam.y && bpy < state.cam.y + state.canvas.height;
+      if (!onScreen) state.underAttackTimer = 300;
+    }
+  }
   if (attacker && attacker.px !== undefined)
     spawnMuzzle(attacker.px, attacker.py, FDATA[attacker.faction].color);
   if (e.hp <= 0) {

@@ -7,10 +7,12 @@ A browser-based real-time strategy game rendered entirely with Canvas 2D — no 
 - **Three asymmetric factions** — ALLIANCE (balanced), BROTHERHOOD (slow and tough, credit penalty), SYNDICATE (fast and fragile, credit bonus)
 - **Full tech tree** — infantry, vehicles, and aircraft unlocked through a building prerequisite chain
 - **Armor and weapon types** — eight weapon classes with a damage multiplier matrix covering infantry, light, heavy, building, and air armor
-- **Skirmish mode** — single-player vs. up to two AI opponents on a randomly seeded procedural map
-- **Internet multiplayer** — up to three human players in a shared lobby; host runs the authoritative simulation and broadcasts snapshots; clients send commands
+- **Skirmish mode** — single-player vs. two AI opponents on a randomly seeded procedural map
+- **Internet multiplayer** — up to three human players; deterministic rollback netcode keeps all clients in sync with zero input delay
 - **Fog of war** and minimap radar
 - **All graphics procedural** — no external image assets; everything is Canvas 2D geometry and fill
+- **Replays** — save and watch back any multiplayer match
+- **Combat feedback** — floating damage numbers, attack range rings, "under attack" screen alert
 
 ## Prerequisites
 
@@ -46,11 +48,10 @@ Other useful commands:
 
 ```bash
 pnpm build          # type-check, then bundle to dist/
+pnpm test           # run determinism and logic verification (Node.js, no browser)
 pnpm exec tsc --noEmit  # type-check only, no output
 pnpm preview        # serve the dist/ build locally
 ```
-
-There are no tests and no linter configured.
 
 ## How to Play
 
@@ -62,11 +63,13 @@ From the main menu, choose **Skirmish**, select your faction, and start. You beg
 2. Build a Power Plant, then a Refinery. The Refinery spawns a Harvester automatically.
 3. Harvesters collect ore tiles and return credits to your Refinery.
 4. Expand your tech tree — Barracks unlocks infantry, War Factory unlocks vehicles, Airfield unlocks aircraft.
-5. Destroy the enemy Command Center to win.
+5. Destroy all enemy buildings to win.
 
 ### Multiplayer
 
 From the main menu, choose **Create Game** to host a room. Share the four-character room code with other players, who choose **Join Game** and enter the code. All players select factions in the lobby and ready up. The host starts the game.
+
+All players run a full deterministic simulation locally. Commands are broadcast via the server and replayed with rollback if any arrive late — input delay is zero from each player's perspective.
 
 ### Controls
 
@@ -75,26 +78,29 @@ From the main menu, choose **Create Game** to host a room. Share the four-charac
 | Left-click | Select unit or building |
 | Left-click + drag | Box-select multiple units |
 | Double-click unit | Select all visible units of that type |
-| Shift + click | Add to or remove from selection |
-| Right-click empty ground | Pause / unpause |
+| Shift + click | Add to / remove from selection |
+| Shift + right-click / order | Queue command (shift-queue) |
 | Right-click enemy | Attack |
-| Right-click ore tile | Harvest (Harvester only) |
-| Right-click own Refinery | Order Harvester to return |
-| Right-click own building | Set as primary production building |
-| Right-click selected building | Set rally / waypoint |
+| Right-click own building | Set as primary / set waypoint |
 | Right-click while paused | Cancel front queue item (full refund) |
-| Left-click while paused | Resume |
 | Mouse edge / Arrow keys | Scroll camera |
 | Mouse wheel | Scroll camera |
-| Click minimap | Jump camera |
-| F | Deploy selected MCV |
-| S | Stop selected units |
-| H | Jump camera to Command Center |
-| P | Toggle pause |
-| Escape | Cancel build / repair / sell mode; deselect all; resume if paused |
-| B | Switch sidebar to Build tab |
-| T | Switch sidebar to Train tab |
-| Ctrl/Cmd + A | Select all own units |
+| Click or drag minimap | Jump / pan camera |
+| **Escape** | Cancel active mode (build / repair / sell / A / P) → deselect → **pause** |
+| **A** | Attack-move mode (click destination) |
+| **P** | Patrol mode (click destination; unit bounces A↔B, auto-attacks) |
+| **S** | Stop selected units |
+| **F** | Deploy selected MCV |
+| **H** | Jump camera to Command Center |
+| **B** | Switch sidebar to Build tab |
+| **T** | Switch sidebar to Train tab |
+| **Ctrl/Cmd + A** | Select all own units |
+| **1–9** | Recall control group (double-tap to center camera) |
+| **Ctrl + 1–9** | Assign selection to control group |
+
+### Speed Control
+
+The speed bar in the top-right (`◄ NORMAL ►`) adjusts simulation rate: Slowest → Slow → Normal → Fast → Fastest. In multiplayer only the host can change speed.
 
 ## Factions
 
@@ -121,28 +127,21 @@ Command Center
 
 ### Frontend — Vercel
 
-The repository includes `vercel.json` with a catch-all SPA rewrite. Import the repository into Vercel and it deploys automatically on push. No additional build configuration is needed beyond what Vite reads from `package.json`.
+The repository includes `vercel.json` with a catch-all SPA rewrite. Import the repository into Vercel and it deploys automatically on push.
 
-You must add one environment variable in your Vercel project settings before the multiplayer client can connect:
+Add one environment variable in your Vercel project settings:
 
 | Variable | Value |
 |---|---|
 | `VITE_WS_URL` | `wss://your-server.up.railway.app` |
 
-The `VITE_` prefix is required for Vite to expose the value to the browser bundle. See `.env.example` for reference.
-
 ### Multiplayer Server — Railway
 
-The `server/` directory contains `railway.json` preconfigured for Railway's Nixpacks builder. To deploy:
+The `server/` directory contains `railway.json` preconfigured for Railway's Nixpacks builder:
 
-1. Create a new Railway project and point it at the `server/` directory (or the full repo with root directory set to `server/`).
+1. Create a new Railway project pointing at the `server/` directory.
 2. Railway reads `railway.json` and runs `node server.js`.
-3. Railway injects a `PORT` environment variable automatically; the server uses it (`process.env.PORT ?? 3001`).
-4. Copy the public Railway URL (WebSocket-capable) and set it as `VITE_WS_URL` in your Vercel project settings in the form `wss://your-server.up.railway.app`.
-
-### Wiring Frontend to Server
-
-The frontend reads `import.meta.env.VITE_WS_URL` at runtime to know where to connect. Set this in Vercel project settings (not in a committed `.env` file) and redeploy the frontend after adding it.
+3. Copy the public Railway URL and set it as `VITE_WS_URL` in Vercel.
 
 For local multiplayer testing, no environment variable is needed — the client falls back to `ws://localhost:3001`.
 
@@ -153,17 +152,24 @@ For local multiplayer testing, no environment variable is needed — the client 
 | Bundler | Vite 6 |
 | UI framework | React 19 |
 | State management | Zustand 5 (vanilla store, no React context) |
-| Language | TypeScript 5 (strict); game engine files in plain JS |
+| Language | TypeScript 5 (strict); game engine in plain JS |
 | Rendering | Canvas 2D API (no WebGL, no sprite sheets) |
 | Multiplayer transport | WebSocket (`ws` npm package, Node.js server) |
+| Netcode | Deterministic rollback (GGPO-style) — all clients simulate locally |
 | Frontend hosting | Vercel |
 | Server hosting | Railway |
 
 ## Architecture Overview
 
-The game uses a split engine + React overlay pattern. A pure-JavaScript game loop owns all simulation state in a mutable singleton (`js/state.js`) and renders to a `<canvas>` element. React components are fixed-position overlays that read exclusively from a Zustand store (`js/store.ts`). The engine pushes snapshots into the store via `syncFromGameState()` once per tick; React never reads game state directly.
+The game uses a split engine + React overlay pattern. A pure-JavaScript game loop owns all simulation state in a mutable singleton (`js/state.js`) and renders to a `<canvas>` element. React components are fixed-position overlays that read exclusively from a Zustand store (`js/store.ts`). The engine pushes snapshots via `syncFromGameState()` once per tick; React never reads game state directly.
 
-In multiplayer, the host runs the full simulation. Clients send input commands via WebSocket and render only the snapshots the host broadcasts. The Node.js server is a pure relay — it holds no game logic.
+### Multiplayer (rollback netcode)
+
+All players run the full simulation locally on a fixed 20Hz tick rate. When a player issues a command it is applied immediately (zero input delay) and sent to the server, which relays it to all other clients. If a remote input arrives after the tick it belongs to, the engine rolls back to the last snapshot before that tick, re-simulates with the correct inputs, and resumes — invisible at typical latencies. A ring buffer of 8 snapshots (400ms at 20Hz) covers the rollback window. Every 20 ticks each client sends an entity hash for desync detection.
+
+### Skirmish
+
+Single-player mode bypasses all networking. The same simulation loop runs without rollback; AI opponents are deterministic via a seeded PRNG (`js/rng.js`).
 
 ## License
 

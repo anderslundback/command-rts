@@ -1,4 +1,4 @@
-import { TS, FDATA, FBONUSES } from './constants.js';
+import { TS, FDATA, FBONUSES, VEHICLE_TYPES } from './constants.js';
 import { state } from './state.js';
 import { getTile, nearestOre } from './map.js';
 import { T } from './constants.js';
@@ -7,26 +7,36 @@ import { astar, adjTile, adjToBuilding, distToEnt } from './pathfinding.js';
 import { nearestRefinery, hasPwr } from './resources.js';
 import { dealDmg, dealSplash, autoAttack } from './combat.js';
 import { spawnShell } from './shells.js';
-import { orderHarvest, orderMove, orderAttack, orderAttackMove } from './orders.js';
+import { orderHarvest, orderMove, orderAttack, orderAttackMove, orderPatrol } from './orders.js';
 import { playShot, playCash } from './audio.js';
 
-const VEHICLE_TYPES = new Set(['tank', 'harvester', 'mcv', 'scout', 'aatrack', 'artillery', 'v2rocket', 'tomahawk']);
 
 export function updateUnit(u) {
   if (u.armorType === 'air') { updateAirUnit(u); return; }
 
   if (u.hitFlash > 0) u.hitFlash--;
 
-  // Depot auto-repair for vehicles
+  // Depot repair: player vehicles must be idle on the pad; AI uses adjacency
   if (VEHICLE_TYPES.has(u.type) && u.hp < u.maxHp) {
     if (state.tick % 3 === 0 && hasPwr(u.faction)) {
+      const isPlayer = u.faction === state.playerFaction;
       const depot = state.entities.find(e => !e.dead && e.isBuilding && e.faction === u.faction &&
-        e.type === 'depot' && e.done && adjToBuilding(u.x, u.y, e));
+        e.type === 'depot' && e.done &&
+        (isPlayer
+          ? (u.state === 'idle' && u.x >= e.x && u.x < e.x + e.w && u.y >= e.y && u.y < e.y + e.h)
+          : adjToBuilding(u.x, u.y, e)));
       if (depot && state.credits[u.faction] >= 0.15) {
         state.credits[u.faction] -= 0.15;
         u.hp = Math.min(u.maxHp, u.hp + 2);
         u.hitFlash = 0;
       }
+    }
+  }
+
+  // Harvester passive regen: slowly self-repairs up to 50% HP; stops while taking damage
+  if (u.type === 'harvester' && u.hp < u.maxHp * 0.5 && u.hitFlash === 0) {
+    if (state.tick % 15 === 0) {
+      u.hp = Math.min(u.maxHp * 0.5, u.hp + 1);
     }
   }
 
@@ -71,6 +81,27 @@ export function updateUnit(u) {
       break;
     }
 
+    case 'patrol': {
+      let nearest = null, nearestDist = Infinity;
+      for (const e of state.entities) {
+        if (!e.dead && e.faction !== u.faction && u.dmg > 0) {
+          const d = distToEnt(u, e);
+          if (d < u.range + 0.5 && d < nearestDist) { nearest = e; nearestDist = d; }
+        }
+      }
+      if (nearest) {
+        u.state = 'attack'; u.target = nearest.id; u.path = [];
+        break;
+      }
+      stepPath(u);
+      if (!u.path.length) {
+        const tmp = u.patrolA; u.patrolA = u.patrolB; u.patrolB = tmp;
+        u.path = astar(u.x, u.y, u.patrolB.tx, u.patrolB.ty, false);
+        u.mprog = 0;
+      }
+      break;
+    }
+
     case 'attack': {
       const tgt = getEnt(u.target);
       if (!tgt || tgt.dead) {
@@ -79,6 +110,9 @@ export function updateUnit(u) {
           u.state = 'attack_move';
           u.path = astar(u.x, u.y, u.atkMoveDest.tx, u.atkMoveDest.ty, false);
           u.mprog = 0;
+        } else if (u.patrolA) {
+          u.state = 'patrol';
+          if (!u.path.length) { u.path = astar(u.x, u.y, u.patrolB.tx, u.patrolB.ty, false); u.mprog = 0; }
         } else {
           dequeueNext(u);
         }
@@ -177,6 +211,7 @@ function dequeueNext(u) {
   if (!next) { u.state = 'idle'; return; }
   if (next.action === 'move') orderMove(u, next.tx, next.ty);
   else if (next.action === 'attack_move') orderAttackMove(u, next.tx, next.ty);
+  else if (next.action === 'patrol') orderPatrol(u, next.tx, next.ty);
   else if (next.action === 'attack') {
     const t = getEnt(next.targetId);
     if (t && !t.dead) orderAttack(u, t);
@@ -236,6 +271,7 @@ function updateAirUnit(u) {
       if (!tgt || tgt.dead) {
         u.target = null;
         if (u.atkMoveDest) { u.state = 'attack_move'; }
+        else if (u.patrolA) { u.state = 'patrol'; }
         else { dequeueNext(u); }
         break;
       }

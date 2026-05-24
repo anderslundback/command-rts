@@ -8,7 +8,8 @@ export function makeAI(f) {
   return {
     f,
     btimer: 0,
-    wtimer: 300 + f * 120,
+    wtimer: f * 100,
+    htimer: 200 + f * 80,
 
     myBuildings(type) {
       return state.entities.filter(e => !e.dead && e.isBuilding && e.faction === this.f && e.done && (!type || e.type === type));
@@ -19,7 +20,6 @@ export function makeAI(f) {
 
     update() {
       this.btimer++;
-      this.wtimer++;
       const cr = state.credits[this.f];
       const blist = this.myBuildings();
       if (!blist.some(b => b.type === 'command')) return;
@@ -70,7 +70,47 @@ export function makeAI(f) {
       for (const u of this.myUnits('harvester'))
         if (u.state === 'idle') { const ref = nearestRefinery(this.f, u.x, u.y); if (ref) orderHarvest(u, ref); }
 
-      if (this.wtimer > 720 + ((state.rng() * 360) | 0)) {
+      // Repair damaged buildings
+      if (this.btimer % 90 === 0) {
+        for (const b of this.myBuildings()) {
+          if (b.hp < b.maxHp * 0.5 && state.credits[this.f] > 300) b.repairing = true;
+          else if (b.hp >= b.maxHp) b.repairing = false;
+        }
+      }
+
+      // Defensive recall: if own building under attack redirect some units back
+      if (this.btimer % 40 === 0) {
+        const underAttack = this.myBuildings().some(b => b.hitFlash > 0);
+        if (underAttack) {
+          const artType = ['artillery', 'v2rocket', 'tomahawk'][this.f];
+          const airType = ['fighter', 'gunship', 'drone'][this.f];
+          const fighters = [
+            ...this.myUnits('rifleman'), ...this.myUnits('rocketeer'),
+            ...this.myUnits('scout'), ...this.myUnits('tank'),
+            ...this.myUnits(artType), ...this.myUnits(airType),
+          ].filter(u => u.state === 'attack' || u.state === 'attack_move');
+          const recall = fighters.slice(0, Math.ceil(fighters.length * 0.35));
+          const cmd = this.myBuildings().find(b => b.type === 'command');
+          if (cmd && recall.length) recall.forEach(u => orderAttack(u, cmd));
+        }
+      }
+
+      // Harvester harassment: small fast squad targets enemy harvesters
+      this.htimer++;
+      if (this.htimer > 600 + ((state.rng() * 200) | 0)) {
+        this.htimer = 0;
+        const enemyHarvesters = state.entities.filter(e => !e.dead && e.isUnit && e.faction !== this.f && e.type === 'harvester');
+        if (enemyHarvesters.length) {
+          const harassers = [...this.myUnits('scout'), ...this.myUnits('rifleman')].slice(0, 3);
+          const tgt = enemyHarvesters[(state.rng() * enemyHarvesters.length) | 0];
+          harassers.forEach(u => orderAttack(u, tgt));
+        }
+      }
+
+      // Main attack wave
+      this.wtimer++;
+      const waveInterval = Math.max(300, 480 - Math.min(240, (state.tick / 10) | 0));
+      if (this.wtimer > waveInterval + ((state.rng() * 240) | 0)) {
         this.wtimer = 0;
         const artType = ['artillery', 'v2rocket', 'tomahawk'][this.f];
         const airType = ['fighter', 'gunship', 'drone'][this.f];
@@ -80,22 +120,25 @@ export function makeAI(f) {
           ...this.myUnits('tank'), ...this.myUnits(artType), ...this.myUnits(airType),
         ];
         if (fighters.length >= 4) {
-          const enemyUnits = state.entities.filter(e => !e.dead && e.isUnit && e.faction !== this.f &&
-            (e.type === 'rifleman' || e.type === 'rocketeer' || e.type === 'tank'));
-          let tgt = null;
-          if (enemyUnits.length > 0) {
-            tgt = enemyUnits[(state.rng() * enemyUnits.length) | 0];
-          } else {
-            const enemyBuildings = state.entities.filter(e => !e.dead && e.isBuilding && e.faction !== this.f);
-            for (const type of ['command', 'refinery', 'factory', 'barracks']) {
-              tgt = enemyBuildings.find(b => b.type === type);
-              if (tgt) break;
-            }
-            if (!tgt) tgt = enemyBuildings[(state.rng() * enemyBuildings.length) | 0];
-          }
+          const tgt = this._pickTarget();
           if (tgt) fighters.forEach(u => orderAttack(u, tgt));
         }
       }
+    },
+
+    _pickTarget() {
+      const enemies = state.entities.filter(e => !e.dead && e.faction !== this.f);
+      const harvesters = enemies.filter(e => e.isUnit && e.type === 'harvester');
+      if (harvesters.length) return harvesters[(state.rng() * harvesters.length) | 0];
+      const enemyUnits = enemies.filter(e => e.isUnit &&
+        (e.type === 'rifleman' || e.type === 'rocketeer' || e.type === 'tank' || e.type === 'scout'));
+      if (enemyUnits.length) return enemyUnits[(state.rng() * enemyUnits.length) | 0];
+      const buildings = enemies.filter(e => e.isBuilding);
+      for (const type of ['refinery', 'command', 'factory', 'barracks']) {
+        const b = buildings.find(b => b.type === type);
+        if (b) return b;
+      }
+      return buildings.length ? buildings[(state.rng() * buildings.length) | 0] : null;
     },
 
     _tryBuild(type, bx, by) {

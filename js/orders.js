@@ -71,9 +71,25 @@ export function orderHarvest(u, refinery) {
   }
 }
 
+export function orderPatrol(u, tx, ty, queued = false) {
+  if (queued) {
+    (u.orderQueue ??= []).push({ action: 'patrol', tx, ty });
+    return;
+  }
+  u.orderQueue = [];
+  u.atkMoveDest = null;
+  u.patrolA = { tx: u.x, ty: u.y };
+  u.patrolB = { tx, ty };
+  u.state = 'patrol';
+  u.path = astar(u.x, u.y, tx, ty, false);
+  u.mprog = 0;
+}
+
 export function orderStop(u) {
   u.orderQueue = [];
   u.atkMoveDest = null;
+  u.patrolA = null;
+  u.patrolB = null;
   u.state = 'idle';
   u.path = [];
   u.target = null;

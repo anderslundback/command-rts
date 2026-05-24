@@ -1,6 +1,6 @@
 import { BDEF, UDEF } from './constants.js';
 import { state } from './state.js';
-import { orderMove, orderAttack, orderAttackMove, orderStop, orderHarvest } from './orders.js';
+import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderStop, orderHarvest } from './orders.js';
 import { placeBuilding, deployMcvInPlace } from './placement.js';
 
 export function applyCommand(cmd) {
@@ -15,6 +15,9 @@ export function applyCommand(cmd) {
     }
     case 'attack_move':
       for (const id of cmd.ids) { const u = state.entById.get(id); if (u && !u.dead) orderAttackMove(u, cmd.tx, cmd.ty, cmd.queued); }
+      break;
+    case 'patrol':
+      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && !u.dead) orderPatrol(u, cmd.tx, cmd.ty, cmd.queued); }
       break;
     case 'stop':
       for (const id of cmd.ids) { const u = state.entById.get(id); if (u) orderStop(u); }
@@ -87,5 +90,18 @@ export function applyCommand(cmd) {
     case 'set_speed':
       state.gameSpeed = Math.max(0, Math.min(4, cmd.speed));
       break;
+    case 'repair_move': {
+      const depot = state.entById.get(cmd.entId);
+      if (!depot || depot.dead) break;
+      const tiles = [];
+      for (let dy = 0; dy < depot.h; dy++)
+        for (let dx = 0; dx < depot.w; dx++)
+          tiles.push({ x: depot.x + dx, y: depot.y + dy });
+      cmd.ids.forEach((id, i) => {
+        const u = state.entById.get(id);
+        if (u && !u.dead) orderMove(u, tiles[i % tiles.length].x, tiles[i % tiles.length].y, cmd.queued);
+      });
+      break;
+    }
   }
 }

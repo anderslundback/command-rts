@@ -1,4 +1,4 @@
-import { TS, MW, MH, BDEF, UDEF, FBONUSES } from './constants.js';
+import { TS, MW, MH, BDEF, UDEF, FBONUSES, VEHICLE_TYPES } from './constants.js';
 import { state } from './state.js';
 import { getEnt, getEntAt } from './entities.js';
 import { getTile } from './map.js';
@@ -6,7 +6,7 @@ import { T } from './constants.js';
 import { astar } from './pathfinding.js';
 import { canPlace, placeBuilding, deployMcvInPlace } from './placement.js';
 import { nearestRefinery, calcPower } from './resources.js';
-import { orderMove, orderAttack, orderAttackMove, orderHarvest } from './orders.js';
+import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderHarvest } from './orders.js';
 import { setMsg, updateBuildPanel, switchTab } from './hud.js';
 import { scheduleInput } from './net/netClient.js';
 
@@ -125,6 +125,25 @@ function onClick(ev) {
       state.moveIndicators.push({ wx: tx * TS + TS / 2, wy: ty * TS + TS / 2, t: 30 });
     }
     if (!ev.shiftKey) { state.atkMoveMode = false; state.canvas.style.cursor = 'default'; }
+    return;
+  }
+
+  if (state.patrolMode) {
+    const myUnits = state.selected.map(id => state.entById.get(id)).filter(u => u?.isUnit && u.faction === f && !u.dead && u.dmg > 0);
+    if (myUnits.length) {
+      if (state.net) {
+        scheduleInput({ action: 'patrol', ids: myUnits.map(u => u.id), tx, ty, queued: ev.shiftKey });
+      } else {
+        const cols = Math.ceil(Math.sqrt(myUnits.length));
+        myUnits.forEach((u, i) => {
+          const offX = (i % cols) - Math.floor(cols / 2);
+          const offY = Math.floor(i / cols) - Math.floor(cols / 2);
+          orderPatrol(u, tx + offX, ty + offY, ev.shiftKey);
+        });
+      }
+      state.moveIndicators.push({ wx: tx * TS + TS / 2, wy: ty * TS + TS / 2, t: 30 });
+    }
+    if (!ev.shiftKey) { state.patrolMode = false; state.canvas.style.cursor = 'default'; }
     return;
   }
 
@@ -267,8 +286,27 @@ function onRightClick(ev) {
   const f = state.playerFaction;
   const target = getEntAt(tx, ty);
 
-  // Right-click own building → set as primary (always, regardless of unit selection)
+  // Right-click own building: depot + vehicles selected → send to repair pad; otherwise set primary
   if (target?.isBuilding && target.faction === f) {
+    const myVehicles = state.selected
+      .map(id => state.entById.get(id))
+      .filter(u => u?.isUnit && u.faction === f && !u.dead && VEHICLE_TYPES.has(u.type));
+    if (target.type === 'depot' && target.done && myVehicles.length) {
+      const tiles = [];
+      for (let dy = 0; dy < target.h; dy++)
+        for (let dx = 0; dx < target.w; dx++)
+          tiles.push({ x: target.x + dx, y: target.y + dy });
+      if (state.net) {
+        scheduleInput({ action: 'repair_move', ids: myVehicles.map(u => u.id), entId: target.id, queued: ev.shiftKey });
+      } else {
+        myVehicles.forEach((u, i) => {
+          const t = tiles[i % tiles.length];
+          orderMove(u, t.x, t.y, ev.shiftKey);
+        });
+      }
+      state.moveIndicators.push({ wx: (target.x + target.w / 2) * TS, wy: (target.y + target.h / 2) * TS, t: 30 });
+      return;
+    }
     state.primaryBuilding[target.type] = target.id;
     if (state.net) scheduleInput({ action: 'set_primary', btype: target.type, entId: target.id });
     setMsg(BDEF[target.type].name + ' set as primary', 90);
@@ -352,26 +390,16 @@ function onRightClick(ev) {
 
 function onKey(ev) {
   if (!state.gameStarted) return;
-  if (state.paused && ev.key !== 'Escape' && ev.key !== 'p' && ev.key !== 'P') return;
+  if (state.paused && ev.key !== 'Escape') return;
   const SPD = 80;
   if (ev.key === 'Escape') {
     if (state.paused) { import('./game.js').then(m => m.togglePause()); return; }
-    if (state.atkMoveMode) {
-      state.atkMoveMode = false;
-      state.canvas.style.cursor = 'default';
-      return;
-    }
+    if (state.atkMoveMode) { state.atkMoveMode = false; state.canvas.style.cursor = 'default'; return; }
+    if (state.patrolMode) { state.patrolMode = false; state.canvas.style.cursor = 'default'; return; }
     if (state.buildMode || state.repairMode || state.sellMode) {
-      state.buildMode = null;
-      state.buildReady = false;
-      clearModes();
-      updateBuildPanel();
-      return;
+      state.buildMode = null; state.buildReady = false; clearModes(); updateBuildPanel(); return;
     }
-    state.selected = [];
-    updateBuildPanel();
-  }
-  if (ev.key === 'p' || ev.key === 'P') {
+    if (state.selected.length) { state.selected = []; updateBuildPanel(); return; }
     import('./game.js').then(m => m.togglePause());
   }
   if (ev.key === 'ArrowLeft')  state.cam.x -= SPD;
@@ -416,6 +444,14 @@ function onKey(ev) {
         return u?.isUnit && u.faction === state.playerFaction && !u.dead && u.dmg > 0;
       });
       if (hasAttackers) { state.atkMoveMode = true; state.canvas.style.cursor = 'crosshair'; }
+    }
+    // Patrol mode: P key
+    if ((ev.key === 'p' || ev.key === 'P') && !ev.ctrlKey && !ev.metaKey && !state.paused) {
+      const hasAttackers = state.selected.some(id => {
+        const u = state.entById.get(id);
+        return u?.isUnit && u.faction === state.playerFaction && !u.dead && u.dmg > 0;
+      });
+      if (hasAttackers) { state.patrolMode = true; state.canvas.style.cursor = 'crosshair'; }
     }
   }
 

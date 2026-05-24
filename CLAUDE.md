@@ -8,23 +8,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm install
 pnpm dev        # http://localhost:5173 with HMR
 pnpm build      # type-check → bundle → dist/
+pnpm test       # run determinism/logic tests (Node.js, no browser required)
 pnpm exec tsc --noEmit  # type-check only
 
 # Multiplayer server (separate process)
 cd server && node server.js   # WebSocket server on :3001
-# Or with custom port:
-PORT=3001 node server.js
 ```
 
-No tests, no linter.
+`pnpm test` runs `test/verify.js` — pure Node.js checks of `rng.js` and the entity-hash formula. No test framework, no browser needed. Add tests there for any new pure functions.
 
 ## Architecture: split engine + React overlay
 
 **Entry point:** `index.html` → `js/main.ts`. Mounts React on `<div id="ui-root">`, wires `<canvas id="canvas">`, calls `initInput()`.
 
-**Canvas engine** (pure JS, `js/*.js`): draws everything via `state.js`'s mutable singleton. The game loop in `game.js` updates entities, runs AI, then calls `syncFromGameState()` once per tick to push a plain-data snapshot into the Zustand UI store.
+**Canvas engine** (pure JS, `js/*.js`): draws everything via `state.js`'s mutable singleton. The game loop in `game.js` runs at a fixed 20Hz accumulator rate, updates entities, runs AI, then calls `syncFromGameState()` once per tick to push a plain-data snapshot into the Zustand UI store. Rendering is decoupled at 60fps via sub-tick alpha interpolation (`e.prevPx/prevPy`).
 
-**Multiplayer** (optional, gated on `state.net?.role`): A Node.js WebSocket relay server (`server/server.js`) manages rooms and relays messages. The host runs the full simulation and broadcasts entity snapshots every 6 ticks. Clients render received state only, sending input commands via `dispatchCommand()` in `js/net/netClient.js`. Skirmish mode (`state.net === null`) is completely unaffected.
+**Multiplayer — deterministic rollback:** All players run the full simulation locally. Commands are applied immediately and relayed via the WebSocket server. If a remote input arrives late, the engine rolls back to the nearest snapshot and re-simulates. The server is a pure relay — no game logic. `js/lockstep.js` owns snapshot save/restore, rollback, and input scheduling. `js/rng.js` provides a seeded, restorable PRNG so all randomness is deterministic.
 
 **React overlay** (`js/ui/*.tsx`, `js/store.ts`): React reads only from the Zustand `uiStore` — never from `state.js` directly. Components are fixed-position overlays with `pointer-events: none` on the root and `pointer-events: auto` on interactive children. The sidebar radar canvas is owned by React (`<canvas id="radar">` in `Sidebar.tsx`) and its ref is written into `state.radar` via `useEffect` so `renderer.js` can draw to it.
 
@@ -34,43 +33,63 @@ No tests, no linter.
 |---|---|---|
 | Canvas engine (`.js` files) | `state` directly | `state` directly |
 | `syncFromGameState()` | `state` | `uiStore.setState({...})` |
-| React components | `useUIStore(selector)` | `state` directly then call `syncFromGameState()` (via `import('../game.js').then(...)` for game lifecycle, or the `mutate()` helper in `BuildPanel.tsx` for mid-game actions) |
+| React components | `useUIStore(selector)` | `state` directly then call `syncFromGameState()` |
 | `netClient.js` | WebSocket messages | `uiStore.setState(...)` directly (lobby/net slices only) |
 
 **Rule:** Game-logic mutations happen in the JS engine or in React event handlers that write to `state` directly. React never reads from `state`. The Zustand store (`uiStore`) is read-only from React's perspective.
 
-### Tick ownership
+### Game loop structure
 
-All entity updates happen in `game.js`'s `loop()`. The loop calls `syncFromGameState()` at the end of each non-paused tick. `setMsg()` and `updateBuildPanel()` in `hud.js` are now thin wrappers that call `syncFromGameState()` — they exist only so the JS engine can call them without knowing about React.
+```
+loop() [requestAnimationFrame / setTimeout when tab hidden]
+  ├── accumulator += dt
+  ├── while accumulator >= tickMs: gameTick()   ← fixed 20Hz simulation
+  ├── updateParticles()                          ← cosmetic, per render frame
+  ├── advance damageNumbers (age/position)       ← cosmetic, per render frame
+  ├── syncFromGameState()
+  ├── _applyRenderAlpha(alpha)                   ← lerp unit positions for 60fps
+  ├── render() / renderMinimap()
+  └── _restoreRenderAlpha()
+```
+
+`gameTick()` is also exported as `_gameTick()` for `lockstep.js` rollback replay.
 
 ## Module map
 
 | File(s) | Role |
 |---|---|
 | `js/state.js` | Mutable game-state singleton; `state.net` is null in skirmish |
-| `js/game.js` | `startGame`, `startNetGame`, `showMenu`, `togglePause`, `applySnapshot`, `applyCommand`, game loop |
-| `js/net/netClient.js` | Browser WebSocket singleton; `net.connect/send/on/off`; `dispatchCommand(cmd)` for client input; `registerGameCallbacks()` to wire game.js without circular imports |
+| `js/game.js` | `startGame`, `startNetGame`, `showMenu`, `togglePause`, `setGameSpeed`, `saveReplay`, `startReplay`; game loop |
+| `js/lockstep.js` | `saveSnapshot`, `restoreSnapshot`, `scheduleInput`, `storeTickSnapshot`, `onRemoteInput`, `entityHash`; rollback ring buffer |
+| `js/rng.js` | `makeLCG(seed)` — Mulberry32 PRNG with `getState`/`setState` for rollback |
+| `js/commands.js` | `applyCommand(cmd)` — applies all action types; used by both local skirmish and rollback replay |
+| `js/net/netClient.js` | Browser WebSocket singleton; `scheduleInput(cmd)` routes commands through rollback in multiplayer; `registerGameCallbacks()` avoids circular imports |
 | `js/constants.js` | `BDEF`, `UDEF`, `FDATA`, `FBONUSES`, `ARMOR_MULT`, `BUILD_TYPES`, `DEFENSE_TYPES`, `TRAIN_FROM` |
 | `js/entities.js` | `Ent`, `Building`, `Unit` classes; `addEnt`, `getEnt`, `removeDeadEnts` |
-| `js/renderer.js` | Canvas 2D rendering; `renderMinimap()` null-guards `state.radar` |
-| `js/input.js` | Mouse/keyboard handlers; F=deploy MCV; right-click-pause |
+| `js/renderer.js` | Canvas 2D rendering; range rings for selected armed entities; floating damage numbers; under-attack border; `renderMinimap()` |
+| `js/input.js` | Mouse/keyboard handlers; Escape = layered cancel → pause; A = attack-move mode; P = patrol mode; 1–9 control groups |
+| `js/orders.js` | `orderMove`, `orderAttack`, `orderAttackMove`, `orderPatrol`, `orderStop`, `orderHarvest` |
 | `js/hud.js` | Thin wrappers: `setMsg`, `updateHUD`, `updateBuildPanel`, `switchTab` — all call `syncFromGameState()` |
 | `js/store.ts` | `uiStore` (Zustand vanilla), `syncFromGameState()`, `useUIStore` hook |
 | `js/ui/App.tsx` | Root React component; renders HUD+Sidebar when playing, Menu when in menu/gameover, PauseMenu overlay |
-| `js/ui/HUD.tsx` | Fixed 36px top bar: faction, credits, power, status msg, FPS |
-| `js/ui/Sidebar.tsx` | Fixed 200px right panel: radar canvas, power bar, InfoPanel, tab buttons, BuildPanel |
-| `js/ui/BuildPanel.tsx` | Build/train tabs with queue rows and cancel buttons; writes to `state` then calls `syncFromGameState()` |
+| `js/ui/HUD.tsx` | Fixed 36px top bar: faction, credits, power, status msg, speed control, FPS, replay badge |
+| `js/ui/Sidebar.tsx` | Fixed 200px right panel: radar canvas (with drag-to-pan), power bar, InfoPanel, tab buttons, BuildPanel |
+| `js/ui/BuildPanel.tsx` | Build/train tabs with queue rows and cancel buttons |
 | `js/ui/InfoPanel.tsx` | Selected entity details; DEPLOY MCV button |
-| `js/ui/Menu.tsx` | SKIRMISH / CREATE GAME / JOIN GAME sub-phases; faction select; game-over screen |
+| `js/ui/Menu.tsx` | SKIRMISH / CREATE GAME / JOIN GAME sub-phases; faction select; game-over screen with Save Replay |
 | `js/ui/LobbyScreen.tsx` | Pre-game lobby: player list, faction selects, chat, ready/start |
 | `js/ui/PauseMenu.tsx` | Pause overlay with resume/volume/quit |
-| `js/ai.js` | Per-faction AI controller |
+| `js/ai.js` | Per-faction AI: building construction, unit training, harvester management, attack waves, harvester harassment, defensive recall, building repair |
 | `js/map.js` | Procedural map gen, tile passability, ore regen |
 | `js/placement.js` | `canPlace`, `placeBuilding`, `spawnUnit`, `deployMcvInPlace` |
-| `js/combat.js` | `dealDmg`, `dealSplash` (area damage for artillery/aircraft), `autoAttack` |
-| `js/orders.js`, `js/pathfinding.js`, `js/resources.js` | Pure helpers |
-| `js/particles.js`, `js/audio.js` | Effects and voice lines |
-| `server/server.js` | Node.js WebSocket relay; room/lobby management; no game logic |
+| `js/combat.js` | `dealDmg`, `dealSplash`, `autoAttack`; pushes `state.damageNumbers`; sets `state.underAttackTimer` |
+| `js/units.js` | `updateUnit`, `updateAirUnit`; handles idle/move/attack/attack_move/patrol/harvest/return states; `dequeueNext` for shift-queue |
+| `js/pathfinding.js`, `js/resources.js` | Pure helpers |
+| `js/particles.js`, `js/audio.js` | Cosmetic effects and voice lines |
+| `js/shells.js` | Projectile simulation and collision |
+| `js/fog.js` | Fog-of-war bitmap |
+| `server/server.js` | Node.js WebSocket relay; room/lobby management; desync detection; no game logic |
+| `test/verify.js` | Node.js tests for `makeLCG` and `entityHash` |
 
 ## Key conventions
 
@@ -84,15 +103,27 @@ All entity updates happen in `game.js`'s `loop()`. The loop calls `syncFromGameS
 
 **Build queues:** `state.hudBuildQueue[faction]` for structures, `state.hudDefQueue[faction]` for defenses, `building.trainQ` for units. Items: `{ type, t, total, paid, ready }`.
 
+**Order system:** All order functions in `orders.js` accept a `queued` boolean. When `queued=true` the order is pushed onto `u.orderQueue`; `dequeueNext(u)` in `units.js` pops and executes the next order when the current one completes. The `'patrol'` state bounces between `u.patrolA`/`u.patrolB`, auto-attacking enemies in range, and resuming patrol after each kill.
+
 **MCV deploy:** `deployMcvInPlace(mcv)` in `placement.js` — instantly transforms MCV into Command Center at the nearest valid position. No buildMode cursor.
 
-**Pause/cancel:** Right-click empty ground → pause. While paused, right-click cancels front build/def/train queue item (full credit refund). Left-click resumes.
+**Escape key — layered cancel:** Escape cancels the most recently entered mode in priority order: atkMoveMode → patrolMode → buildMode/repairMode/sellMode → clear selection → `togglePause()`. When paused, Escape always unpauses first.
 
-**Multiplayer command interception:** In `input.js` and `BuildPanel.tsx`, every action that mutates game state is gated: `if (state.net?.role === 'client') { dispatchCommand({...}); return; }`. The host applies commands via `applyCommand()` from the incoming `cmd` relay message. `state.selected`, `state.cam`, and UI-only fields are never intercepted.
+**Pause:** Right-click empty ground OR Escape (when nothing to cancel) → `togglePause()`. While paused, right-click cancels the front queue item (full refund). Left-click on canvas resumes.
 
-**Circular import prevention:** `combat.js`, `orders.js`, `pathfinding.js`, `resources.js` don't import from `units.js`/`buildings.js`. `netClient.js` ↔ `game.js` avoid circular dependency via `registerGameCallbacks()` — game.js registers its exports into netClient at module load time.
+**Rollback snapshot discipline:** `snapshotEnt` in `lockstep.js` must copy every per-entity field that game logic writes. Currently: `path`, `trainQ`, `harvestTile`, `waypoint`, `orderQueue`, `atkMoveDest`, `patrolA`, `patrolB`. If you add a new mutable field to `Unit` or `Building`, add it to `snapshotEnt`/`restoreEnt` or rollback will diverge.
 
-**Map seeding:** `genMapFromSeed(seed)` uses a local LCG so all multiplayer clients generate the same map. Skirmish calls `genMap()` which picks a random seed. Ore regen still uses `Math.random()` — synced via snapshot instead.
+**Cosmetic vs. simulation state:** `state.damageNumbers` and `state.particles` are cosmetic — updated per render frame in `loop()`, not in `gameTick()`, and never snapshotted. `state.underAttackTimer` is simulation state (decremented in `gameTick()`), but only set for the local player's buildings and gated on `!state.isRollingBack` in `combat.js`, so it stays client-local.
+
+**PRNG:** All game-logic randomness uses `state.rng()` (set by `startGame`/`startNetGame`). Cosmetic randomness in `particles.js`, `audio.js`, and tile rendering can use `Math.random()`. Never use `Math.random()` in `ai.js`, `map.js`, or anywhere that runs inside `gameTick()`.
+
+**Control groups:** `state.controlGroups[0..8]`. Ctrl+1–9 assigns current selection; 1–9 recalls; double-tap centers camera on the group.
+
+**Desync detection:** Every 20 ticks in multiplayer, each client sends `{ type: 'state_hash', tick, hash }` to the server. The server compares hashes across clients and broadcasts `{ type: 'desync' }` on mismatch. `entityHash` in `lockstep.js` XORs position and HP of all live entities.
+
+**Multiplayer command flow:** `scheduleInput(cmd)` in `netClient.js` applies the command immediately, records it in `rollback.inputHistory[tick][mySlot]`, and sends it to the server. Remote inputs arrive via the `'input'` WebSocket message, are stored in `inputHistory`, and trigger `onRemoteInput` which calls `rollbackAndReplay` if the tick was already simulated with a wrong prediction.
+
+**Circular import prevention:** `combat.js`, `orders.js`, `pathfinding.js`, `resources.js` don't import from `units.js`/`buildings.js`. `netClient.js` ↔ `game.js` avoid circular dependency via `registerGameCallbacks()`.
 
 **JS/TS interop:** TypeScript files import JS modules with `// @ts-ignore` + typed as `any`. Example: `import { state as _s } from './state.js'; const s: any = _s;`
 

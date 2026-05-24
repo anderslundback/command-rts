@@ -68,3 +68,5 @@ export const TRAIN_FROM    = Object.freeze({
   factory:  ['harvester', 'scout', 'aatrack', 'tank', 'mcv', 'artillery', 'v2rocket', 'tomahawk'],
   airfield: ['fighter', 'gunship', 'drone'],
 });
+
+export const VEHICLE_TYPES = new Set(['tank', 'harvester', 'mcv', 'scout', 'aatrack', 'artillery', 'v2rocket', 'tomahawk']);

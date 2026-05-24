@@ -36,6 +36,8 @@ function snapshotEnt(e) {
     waypoint: e.waypoint ? { ...e.waypoint } : null,
     orderQueue: e.orderQueue ? e.orderQueue.map(o => ({ ...o })) : [],
     atkMoveDest: e.atkMoveDest ? { ...e.atkMoveDest } : null,
+    patrolA: e.patrolA ? { ...e.patrolA } : null,
+    patrolB: e.patrolB ? { ...e.patrolB } : null,
   });
 }
 
@@ -69,6 +71,8 @@ function restoreEnt(s) {
   if (s.trainQ) e.trainQ = s.trainQ.map(q => ({ ...q }));
   e.orderQueue = s.orderQueue ? s.orderQueue.map(o => ({ ...o })) : [];
   if (s.atkMoveDest) e.atkMoveDest = { ...s.atkMoveDest };
+  if (s.patrolA) e.patrolA = { ...s.patrolA };
+  if (s.patrolB) e.patrolB = { ...s.patrolB };
   return e;
 }
 

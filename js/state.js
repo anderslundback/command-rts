@@ -61,8 +61,11 @@ export const state = {
   rollback: null, // set by startNetGame; { buffer, inputHistory, predictions }
   controlGroups: [[], [], [], [], [], [], [], [], []],
   atkMoveMode: false,
+  patrolMode: false,
   replayMode: false,
   _replayEndTick: 0,
   _lastGroupKey: -1,
   _lastGroupTime: 0,
+  damageNumbers: [],
+  underAttackTimer: 0,
 };

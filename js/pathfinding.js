@@ -43,6 +43,7 @@ export function astar(sx, sy, ex, ey, ignoreUnits) {
   for (const e of state.entities) {
     if (e.dead) continue;
     if (e.isBuilding) {
+      if (e.type === 'depot') continue; // depot pad is walkable
       for (let dy = 0; dy < e.h; dy++)
         for (let dx = 0; dx < e.w; dx++)
           occ[(e.y + dy) * MW + (e.x + dx)] = 1;
