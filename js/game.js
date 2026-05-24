@@ -46,7 +46,12 @@ export function startGame(pf) {
 
 export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) {
   state.rng = makeLCG(mapSeed);
-  state.rollback = { buffer: new Array(8).fill(null), inputHistory: {}, predictions: {} };
+  // 64-tick buffer covers ~3.2s at NORMAL speed (50ms/tick), enough for >200ms RTT at all speeds
+  const humanSlots = new Set();
+  for (let slot = 0; slot < slotFactions.length; slot++) {
+    if (slot !== mySlot && slotFactions[slot] != null && !aiSlots[slot]) humanSlots.add(slot);
+  }
+  state.rollback = { buffer: new Array(64).fill(null), inputHistory: {}, predictions: {}, humanSlots, _stallStart: null };
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
   _resetGameState(myFaction, [1000, 2000, 2000]);
 
@@ -258,6 +263,8 @@ registerGameCallbacks({
     net.send({ type: 'input', tick: nextTick, slot: state.net.mySlot, cmd });
   },
   onPlayerLeft: (msg) => {
+    // Stop waiting for this slot's inputs — it now runs as local AI
+    state.rollback?.humanSlots?.delete(msg.slot);
     setMsg(`${msg.name} has left the game`, 300);
     const faction = state.net?.slotFactions?.[msg.slot];
     if (faction != null && !state.AI[faction]) state.AI[faction] = makeAI(faction);

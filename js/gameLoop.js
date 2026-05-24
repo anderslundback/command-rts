@@ -41,6 +41,7 @@ export function loop() {
     const dt = _lastLoopTime > 0 ? Math.min(now - _lastLoopTime, 200) : 0;
     _accumulator += dt;
     while (_accumulator >= tickMs) {
+      if (_shouldStall()) break;
       gameTick();
       _accumulator -= tickMs;
     }
@@ -67,6 +68,29 @@ export function loop() {
 }
 
 export function _gameTick() { gameTick(); }
+
+// Hold the simulation if we haven't yet received a human remote player's input for the
+// next tick. This avoids the misprediction → rollback cycle for normal-latency connections.
+// Give up after 200ms so a lagging/disconnecting player doesn't freeze the game.
+function _shouldStall() {
+  const rb = state.rollback;
+  if (!rb || state.replayMode || !state.net) return false;
+  const humanSlots = rb.humanSlots;
+  if (!humanSlots?.size) return false;
+  const nextTick = state.tick + 1;
+  const inputs = rb.inputHistory[nextTick];
+  for (const slot of humanSlots) {
+    if (!inputs || !(slot in inputs)) {
+      const now = performance.now();
+      if (rb._stallStart == null) rb._stallStart = now;
+      if (now - rb._stallStart < 200) return true; // stall up to 200ms wall-clock
+      rb._stallStart = null; // timeout — accept misprediction, let rollback handle it
+      return false;
+    }
+  }
+  rb._stallStart = null;
+  return false;
+}
 
 function gameTick() {
   state.tick++;

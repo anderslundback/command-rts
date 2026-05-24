@@ -23,8 +23,24 @@ export function dealDmg(e, dmg, attacker) {
       if (!onScreen) state.underAttackTimer = 300;
     }
   }
-  if (attacker && attacker.px !== undefined)
-    spawnMuzzle(attacker.px, attacker.py, FDATA[attacker.faction].color);
+  if (attacker && attacker.px !== undefined) {
+    const acx = attacker.px + TS / 2;
+    const acy = attacker.py + TS / 2;
+    const f = attacker.facing ?? 0;
+    const mx = acx + Math.cos(f) * TS * 0.6, my = acy + Math.sin(f) * TS * 0.6;
+    spawnMuzzle(mx, my, FDATA[attacker.faction].color);
+    if (attacker.weaponType === 'rockets') {
+      // Rocket back-blast smoke trail
+      for (let i = 1; i <= 3; i++) {
+        state.particles.push({
+          x: acx - Math.cos(f) * i * 4, y: acy - Math.sin(f) * i * 4,
+          vx: -Math.cos(f) * 0.4, vy: -Math.sin(f) * 0.4,
+          life: 1, maxLife: 0.25 + i * 0.05,
+          r: 3 + i * 1.5, color: 'rgb(60,50,40)', type: 'smoke',
+        });
+      }
+    }
+  }
   if (e.hp <= 0) {
     e.dead = true;
     calcPower();

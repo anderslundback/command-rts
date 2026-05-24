@@ -1,8 +1,9 @@
-import { BDEF, UDEF, FBONUSES } from './constants.js';
+import { BDEF, UDEF, FBONUSES, FDATA } from './constants.js';
 import { state } from './state.js';
 import { getEnt } from './entities.js';
 import { calcPower, hasPwr, nearestRefinery } from './resources.js';
 import { dealDmg } from './combat.js';
+import { spawnMuzzle } from './particles.js';
 import { spawnNear, placeBuilding } from './placement.js';
 import { orderMove, orderHarvest } from './orders.js';
 import { distToEnt } from './pathfinding.js';
@@ -58,6 +59,7 @@ export function updateBuilding(b) {
     if (advance) {
       item.t = Math.min(item.total, item.t + speedMult);
       if (item.t >= item.total) {
+        b.doorEvent = state.tick; // open door for unit exit animation
         b.trainQ.shift();
         const u = spawnNear(b.faction, item.type, b);
         if (u) {
@@ -78,7 +80,6 @@ export function updateBuilding(b) {
     const curTgt = b.target ? getEnt(b.target) : null;
     if (!curTgt || curTgt.dead) {
       b.target = null;
-      // Anti-air prioritises air targets; turret takes first in range
       if (b.type === 'antiair') {
         for (const e of state.entities) {
           if (e.dead || e.faction === b.faction) continue;
@@ -86,10 +87,22 @@ export function updateBuilding(b) {
         }
       }
       if (!b.target) {
+        // Pass 1: nearest enemy unit
+        let nearest = null, nearestDist = b.range + 1;
         for (const e of state.entities) {
-          if (e.dead || e.faction === b.faction) continue;
-          if (distToEnt(b, e) <= b.range) { b.target = e.id; break; }
+          if (e.dead || e.faction === b.faction || e.isBuilding) continue;
+          const d = distToEnt(b, e);
+          if (d < nearestDist) { nearest = e; nearestDist = d; }
         }
+        // Pass 2: nearest enemy completed building (only when no units in range)
+        if (!nearest) {
+          for (const e of state.entities) {
+            if (e.dead || e.faction === b.faction || !e.isBuilding || !e.done) continue;
+            const d = distToEnt(b, e);
+            if (d <= b.range && d < nearestDist) { nearest = e; nearestDist = d; }
+          }
+        }
+        if (nearest) b.target = nearest.id;
       }
     }
     if (b.target && b.atimer >= b.aspd) {
@@ -99,9 +112,14 @@ export function updateBuilding(b) {
         dealDmg(t, b.dmg, b);
         const bpx = (b.x + b.w / 2) * 32, bpy = (b.y + b.h / 2) * 32;
         const { cam, canvas } = state;
-        if (bpx >= cam.x - 200 && bpx <= cam.x + canvas.width + 200 &&
-            bpy >= cam.y - 200 && bpy <= cam.y + canvas.height + 200) {
+        const onScreen = bpx >= cam.x - 200 && bpx <= cam.x + canvas.width + 200 &&
+                         bpy >= cam.y - 200 && bpy <= cam.y + canvas.height + 200;
+        if (onScreen) {
           playShot(b.type);
+          const tpx = t.isBuilding ? (t.x + t.w / 2) * 32 : t.px + 16;
+          const tpy = t.isBuilding ? (t.y + t.h / 2) * 32 : t.py + 16;
+          const facing = Math.atan2(tpy - bpy, tpx - bpx);
+          spawnMuzzle(bpx + Math.cos(facing) * 13, bpy + Math.sin(facing) * 13, FDATA[b.faction].color);
         }
       }
     }

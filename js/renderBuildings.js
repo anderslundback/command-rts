@@ -217,6 +217,21 @@ function bldRefinery(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick) {
   ctx.strokeStyle = bc; ctx.lineWidth = 0.75; ctx.globalAlpha = 0.2;
   ctx.strokeRect(bx + 32, by + 10, 24, bh - 20);
   ctx.globalAlpha = 1;
+  // Chimneys above drum (right side) — two factory stacks
+  const chW = 7, chH = 18;
+  for (const chX of [tx0 + 1, tx0 + dw - chW - 1]) {
+    ctx.fillStyle = bd; ctx.fillRect(chX, by - chH, chW, chH);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fillRect(chX, by - chH, chW, 3);
+    ctx.strokeStyle = bc; ctx.lineWidth = 1;
+    ctx.strokeRect(chX + 0.5, by - chH + 0.5, chW - 1, chH - 1);
+    // Stack rim cap
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(chX - 1, by - chH - 1, chW + 2, 3);
+    // Smoke puff (animated)
+    const smA = 0.18 + 0.14 * Math.sin(tick * 0.08 + chX);
+    ctx.fillStyle = `rgba(80,70,60,${smA})`;
+    ctx.beginPath(); ctx.arc(chX + chW / 2, by - chH - 4, 4, 0, Math.PI * 2); ctx.fill();
+  }
   // Selection
   ctx.strokeStyle = isSel ? '#fff' : bc; ctx.lineWidth = isSel ? 2.5 : 1.5;
   ctx.strokeRect(bx + 0.75, by + 0.75, bw - 1.5, bh - 1.5);
@@ -244,19 +259,46 @@ function bldBarracks(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(wx, by + 14, 8, 14);
     ctx.strokeStyle = bc; ctx.lineWidth = 1;
     ctx.strokeRect(wx + 0.5, by + 14.5, 7, 13);
-    // Window cross-bar
     ctx.strokeStyle = bc; ctx.globalAlpha = 0.35;
     ctx.beginPath(); ctx.moveTo(wx, by + 21); ctx.lineTo(wx + 8, by + 21); ctx.stroke();
     ctx.globalAlpha = 1;
   }
   // Entrance arch
-  const archX = cx - 10, archY = by + 36;
+  const archX = cx - 10, archY = by + 36, doorH = bh - 36;
+  // Dark interior behind arch
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.beginPath(); ctx.arc(cx, archY, 10, Math.PI, 0); ctx.fill();
-  ctx.fillRect(archX, archY, 20, bh - archY + by);
+  ctx.fillRect(archX, archY, 20, doorH);
+  // Arch frame
   ctx.strokeStyle = bc; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(cx, archY, 10, Math.PI, 0); ctx.stroke();
-  ctx.strokeRect(archX + 0.75, archY + 0.75, 18.5, bh - archY + by - 0.75);
+  ctx.strokeRect(archX + 0.75, archY + 0.75, 18.5, doorH - 0.75);
+  // Animated door panels
+  const trainRatio = e.trainQ?.length ? e.trainQ[0].t / e.trainQ[0].total : 0;
+  const doorIsOpen = (e.doorEvent > 0 && tick - e.doorEvent < 60) || trainRatio >= 0.8;
+  if (!doorIsOpen) {
+    // Two door panels closed
+    ctx.fillStyle = bd;
+    ctx.fillRect(archX + 1, archY, 9, doorH - 1);
+    ctx.fillRect(cx, archY, 9, doorH - 1);
+    ctx.strokeStyle = bc; ctx.lineWidth = 0.75; ctx.globalAlpha = 0.55;
+    ctx.strokeRect(archX + 1.5, archY + 0.5, 8, doorH - 2);
+    ctx.strokeRect(cx + 0.5, archY + 0.5, 8, doorH - 2);
+    ctx.globalAlpha = 1;
+    // Door handles at centre gap
+    ctx.fillStyle = bc; ctx.globalAlpha = 0.6;
+    ctx.fillRect(cx - 3, archY + doorH * 0.45, 2, 4);
+    ctx.fillRect(cx + 1, archY + doorH * 0.45, 2, 4);
+    ctx.globalAlpha = 1;
+  } else {
+    // Doors open — warm interior glow + retracted panels at arch sides
+    ctx.fillStyle = 'rgba(255,200,80,0.10)';
+    ctx.fillRect(archX + 1, archY + 1, 18, doorH - 2);
+    ctx.fillStyle = bd; ctx.globalAlpha = 0.65;
+    ctx.fillRect(archX + 1, archY, 3, doorH - 1);
+    ctx.fillRect(cx + 6, archY, 3, doorH - 1);
+    ctx.globalAlpha = 1;
+  }
   // Steps at entrance
   ctx.fillStyle = 'rgba(255,255,255,0.06)';
   ctx.fillRect(cx - 12, by + bh - 6, 24, 3);
@@ -282,10 +324,22 @@ function bldFactory(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick) {
       { ctx.beginPath(); ctx.moveTo(wx + i * (ww / 4), by + 6); ctx.lineTo(wx + i * (ww / 4), by + bh - 6); ctx.stroke(); }
     ctx.globalAlpha = 1;
   }
+  // Arched roof hump over center (gives factory silhouette vs flat barracks/refinery)
+  ctx.fillStyle = bd;
+  ctx.beginPath(); ctx.ellipse(cx, by + 6, 30, 14, 0, Math.PI, 0); ctx.fill();
+  ctx.strokeStyle = bc; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(cx, by + 6, 30, 14, 0, Math.PI, 0); ctx.stroke();
+  // Roof vent slits on arch
+  ctx.strokeStyle = bc; ctx.lineWidth = 0.75; ctx.globalAlpha = 0.25;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath(); ctx.moveTo(cx + i * 10, by + 6 - 11); ctx.lineTo(cx + i * 10, by + 6 - 5); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
   // Center bay area
   const bayX = bx + 22, bayW = 52, bayY = by + 10, bayH = bh - 20;
   ctx.fillStyle = 'rgba(0,0,0,0.50)'; ctx.fillRect(bayX, bayY, bayW, bayH);
-  const training = e.trainQ?.length > 0;
+  // Door is open while training OR briefly after unit rolls out
+  const training = e.trainQ?.length > 0 || (e.doorEvent > 0 && tick - e.doorEvent < 60);
   // Bay door frame
   ctx.strokeStyle = bc; ctx.lineWidth = 2;
   ctx.strokeRect(bayX + 0.75, bayY + 0.75, bayW - 1.5, bayH - 1.5);
@@ -319,6 +373,20 @@ function bldFactory(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick) {
   ctx.beginPath(); ctx.moveTo(cx, by + 12); ctx.lineTo(cx, by + 22); ctx.stroke();
   ctx.beginPath(); ctx.arc(cx + 3, by + 24, 3, 0, Math.PI); ctx.stroke();
   ctx.globalAlpha = 1;
+  // Exhaust stack (left wing, tall single chimney)
+  const stX = bx + 4, stH = 22, stW = 8;
+  ctx.fillStyle = bd; ctx.fillRect(stX, by - stH, stW, stH);
+  ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fillRect(stX, by - stH, stW, 3);
+  ctx.strokeStyle = bc; ctx.lineWidth = 1;
+  ctx.strokeRect(stX + 0.5, by - stH + 0.5, stW - 1, stH - 1);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(stX - 1, by - stH - 1, stW + 2, 3);
+  // Vent slits on stack
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  for (let s = 0; s < 3; s++) ctx.fillRect(stX + 2, by - stH + 6 + s * 5, stW - 4, 2);
+  // Smoke from stack
+  const smA = 0.20 + 0.15 * Math.sin(tick * 0.07);
+  ctx.fillStyle = `rgba(75,65,55,${smA})`;
+  ctx.beginPath(); ctx.arc(stX + stW / 2, by - stH - 4, 5, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = isSel ? '#fff' : bc; ctx.lineWidth = isSel ? 2.5 : 1.5;
   ctx.strokeRect(bx + 0.75, by + 0.75, bw - 1.5, bh - 1.5);
 }

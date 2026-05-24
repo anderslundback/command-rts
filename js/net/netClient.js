@@ -105,6 +105,11 @@ net.on('error', msg => {
   }
 });
 
+// Desync detected by server
+net.on('desync', () => {
+  uiStore.setState({ desync: true });
+});
+
 // Latency measurement
 net.on('pong', msg => {
   uiStore.setState(st => ({ net: { ...st.net, latencyMs: Date.now() - (msg.t ?? 0) } }));

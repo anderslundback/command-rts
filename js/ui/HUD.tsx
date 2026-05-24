@@ -16,6 +16,8 @@ export function HUD(): React.ReactElement {
   const netState = useUIStore(s => s.net);
   const lobby = useUIStore(s => s.lobby);
   const replayMode = useUIStore(s => s.replayMode);
+  const desync = useUIStore(s => s.desync);
+  const netStall = useUIStore(s => s.netStall);
 
   const fd = FDATA[playerFaction] as { name: string; color: string };
   const powerOk = powerGen >= powerUsed;
@@ -67,6 +69,22 @@ export function HUD(): React.ReactElement {
           {powerUsed}/{powerGen}
         </span>
       </span>
+
+      {/* Waiting for remote input */}
+      {netStall && !desync && (
+        <span style={{ color: '#fa0', fontSize: 10, letterSpacing: 2, border: '1px solid #fa0', padding: '1px 6px' }}
+              title="Waiting for other player's input">
+          WAITING
+        </span>
+      )}
+
+      {/* Desync warning */}
+      {desync && (
+        <span style={{ color: '#f44', fontSize: 10, letterSpacing: 2, fontWeight: 'bold', border: '1px solid #f44', padding: '1px 6px' }}
+              title="Game states have diverged — simulation is out of sync">
+          DESYNC
+        </span>
+      )}
 
       {/* Replay badge */}
       {replayMode && (

@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { Building, Unit } from './entities.js';
 import { net } from './net/netClient.js';
 import { applyCommand } from './commands.js';
+import { uiStore } from './store.js';
 
 // ── Snapshot (save/restore full game state for rollback) ──────────────────────
 
@@ -107,7 +108,12 @@ export function onRemoteInput(tick, slot, cmd, _applyCmd, simulateTickFn) {
 function rollbackAndReplay(fromTick, toTick, simulateTickFn) {
   const snapIdx = (fromTick - 1) % state.rollback.buffer.length;
   const snap = state.rollback.buffer[snapIdx];
-  if (!snap || snap.tick !== fromTick - 1) return; // guard against buffer miss (too deep)
+  if (!snap || snap.tick !== fromTick - 1) {
+    // Input arrived too late to recover — states have permanently diverged
+    console.warn(`[lockstep] buffer miss: need snap for tick ${fromTick - 1}, current tick ${toTick}. States diverged.`);
+    uiStore.setState({ desync: true });
+    return;
+  }
 
   state.isRollingBack = true;
   restoreSnapshot(snap);
@@ -127,6 +133,13 @@ function rollbackAndReplay(fromTick, toTick, simulateTickFn) {
 export function storeTickSnapshot() {
   if (!state.rollback) return;
   state.rollback.buffer[state.tick % state.rollback.buffer.length] = saveSnapshot();
+  // Prune old input history to prevent unbounded memory growth (keep last 200 ticks)
+  if (state.tick % 50 === 0) {
+    const pruneBelow = state.tick - 200;
+    for (const t of Object.keys(state.rollback.inputHistory)) {
+      if (+t < pruneBelow) delete state.rollback.inputHistory[t];
+    }
+  }
 }
 
 // Record our null prediction for a remote slot's input this tick.

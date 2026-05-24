@@ -328,23 +328,41 @@ function unitDrone(ctx, e, cx, cy, r, fd, bc, bd, tick) {
 }
 
 function unitRocketeer(ctx, e, cx, cy, r, fd, bc, bd, tick) {
-  _shadow(ctx, cx, cy, r * 0.8, r * 0.3);
-  // Body
-  ctx.fillStyle = bd; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = bc; ctx.lineWidth = 1; ctx.stroke();
-  // Head
-  ctx.fillStyle = bc;
-  ctx.beginPath(); ctx.arc(cx, cy - r * 0.55, r * 0.35, 0, Math.PI * 2); ctx.fill();
-  // Rocket launcher (large tube)
+  _shadow(ctx, cx, cy, r * 0.9, r * 0.35);
+  // Bulkier armored body
+  const ar = r * 1.1;
+  ctx.fillStyle = bd; ctx.beginPath(); ctx.arc(cx, cy, ar, 0, Math.PI * 2); ctx.fill();
+  // Chest armour plate sheen
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.beginPath(); ctx.arc(cx, cy, ar, -Math.PI * 0.75, -Math.PI * 0.05); ctx.fill();
+  ctx.strokeStyle = bc; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, ar, 0, Math.PI * 2); ctx.stroke();
+  // Enclosed helmet (larger, full-dome — no exposed face)
+  const hcy = cy - ar * 0.56;
+  ctx.fillStyle = bd; ctx.beginPath(); ctx.arc(cx, hcy, ar * 0.37, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = bc; ctx.lineWidth = 1.25;
+  ctx.beginPath(); ctx.arc(cx, hcy, ar * 0.37, 0, Math.PI * 2); ctx.stroke();
+  // Targeting visor slit (cyan tint)
+  ctx.fillStyle = 'rgba(60,210,255,0.65)';
+  ctx.fillRect(cx - ar * 0.24, hcy - ar * 0.09, ar * 0.48, ar * 0.17);
+  // Shoulder-mounted RPG launcher (thick tube)
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(e.facing ?? 0);
-  ctx.fillStyle = bc; ctx.fillRect(2, -3, r + 5, 5.5);
-  ctx.strokeStyle = bd; ctx.lineWidth = 1;
-  ctx.strokeRect(2.5, -2.5, r + 4, 4.5);
-  ctx.restore();
-  // Backpack
-  ctx.fillStyle = bd;
-  ctx.save(); ctx.translate(cx, cy); ctx.rotate(e.facing ?? 0);
-  ctx.fillRect(-r * 0.3, 3, 5, 5);
+  // Launcher body
+  ctx.fillStyle = 'rgba(15,15,15,0.75)'; ctx.fillRect(1, -ar * 0.44, ar + 5, ar * 0.88);
+  ctx.strokeStyle = bc; ctx.lineWidth = 1;
+  ctx.strokeRect(1.5, -ar * 0.44 + 0.5, ar + 4, ar * 0.88 - 1);
+  // Rocket warhead cone at muzzle
+  ctx.fillStyle = '#d86020';
+  ctx.beginPath();
+  ctx.moveTo(ar + 5, -ar * 0.3); ctx.lineTo(ar + 12, 0); ctx.lineTo(ar + 5, ar * 0.3);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#a04010'; ctx.lineWidth = 0.75;
+  ctx.beginPath();
+  ctx.moveTo(ar + 5, -ar * 0.3); ctx.lineTo(ar + 12, 0); ctx.lineTo(ar + 5, ar * 0.3);
+  ctx.closePath(); ctx.stroke();
+  // Open back exhaust port
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(-3, -ar * 0.36, 4, ar * 0.72);
   ctx.restore();
 }
 

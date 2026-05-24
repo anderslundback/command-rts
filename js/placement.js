@@ -49,6 +49,14 @@ export function spawnUnit(f, type, tx, ty) {
 }
 
 export function spawnNear(f, type, building) {
+  // Training buildings: prefer the door tile (bottom-center) so units walk out the door
+  if (building.type === 'barracks' || building.type === 'factory' || building.type === 'airfield') {
+    const doorX = building.x + Math.floor(building.w / 2);
+    const doorY = building.y + building.h;
+    if (trySpawn(f, type, doorX, doorY)) return state.entities[state.entities.length - 1];
+    if (trySpawn(f, type, doorX - 1, doorY)) return state.entities[state.entities.length - 1];
+    if (trySpawn(f, type, doorX + 1, doorY)) return state.entities[state.entities.length - 1];
+  }
   for (let i = -2; i <= building.w + 1; i++) {
     for (const pos of [
       { x: building.x + i, y: building.y - 1 },

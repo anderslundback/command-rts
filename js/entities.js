@@ -37,6 +37,7 @@ export class Building extends Ent {
     this.armorType  = d.armor  ?? 'building';
     this.weaponType = d.weapon ?? null;
     this.isBuilding = true;
+    this.doorEvent = 0; // game tick when door last opened (for training exit animation)
   }
   get done() { return this.bprog >= 1; }
 }
