@@ -22,6 +22,7 @@ export function saveSnapshot() {
     gameOverDelay: state.gameOverDelay,
     gameStats: { ...state.gameStats, powerHistory: [...state.gameStats.powerHistory] },
     oreHistory: new Set(state.oreHistory),
+    mapRows: state.map.map(row => Array.from(row)),
     statusMsg: state.statusMsg,
     statusTimer: state.statusTimer,
     gameSpeed: state.gameSpeed,
@@ -58,6 +59,12 @@ export function restoreSnapshot(snap) {
   state.gameOverDelay = snap.gameOverDelay;
   state.gameStats = { ...snap.gameStats, powerHistory: [...snap.gameStats.powerHistory] };
   state.oreHistory = new Set(snap.oreHistory);
+  if (snap.mapRows) {
+    for (let y = 0; y < snap.mapRows.length; y++) {
+      const row = snap.mapRows[y];
+      for (let x = 0; x < row.length; x++) state.map[y][x] = row[x];
+    }
+  }
   state.statusMsg = snap.statusMsg;
   state.statusTimer = snap.statusTimer;
   state.gameSpeed = snap.gameSpeed ?? 2;
