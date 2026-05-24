@@ -221,17 +221,37 @@ wss.on('connection', ws => {
         const room = rooms.get(meta.code);
         if (!room) return;
         room.hashes ??= {};
+        room.canonicalTick ??= 0;
         room.hashes[msg.tick] ??= {};
         room.hashes[msg.tick][meta.slot] = msg.hash;
         const vals = Object.values(room.hashes[msg.tick]);
         const humanCount = room.players.filter(p => !p.isAI && !p.isEmpty).length;
-        if (vals.length >= humanCount && !vals.every(h => h === vals[0])) {
-          broadcast(room, { type: 'desync', tick: msg.tick });
+        if (vals.length >= humanCount) {
+          if (vals.every(h => h === vals[0])) {
+            room.canonicalTick = Math.max(room.canonicalTick, msg.tick);
+          } else {
+            broadcast(room, { type: 'desync', tick: msg.tick });
+            if (!room._resyncing) {
+              room._resyncing = true;
+              broadcast(room, { type: 'resync_request', canonicalTick: room.canonicalTick, sourceSlot: 0 });
+            }
+          }
         }
         // Prune old hash entries
         for (const t of Object.keys(room.hashes)) {
           if (Number(t) < msg.tick - 40) delete room.hashes[t];
         }
+        break;
+      }
+
+      case 'state_dump': {
+        if (!meta) return;
+        const room = rooms.get(meta.code);
+        if (!room || !room.gameStarted) break;
+        // Relay dump to all other players; clear resync lock so future desyncs can trigger another
+        broadcast(room, { type: 'state_dump', snap: msg.snap }, ws);
+        for (const specWs of room.spectators ?? []) send(specWs, { type: 'state_dump', snap: msg.snap });
+        room._resyncing = false;
         break;
       }
 

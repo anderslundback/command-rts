@@ -135,7 +135,7 @@ export function storeTickSnapshot() {
   state.rollback.buffer[state.tick % state.rollback.buffer.length] = saveSnapshot();
   // Prune old input history to prevent unbounded memory growth (keep last 200 ticks)
   if (state.tick % 50 === 0) {
-    const pruneBelow = state.tick - 200;
+    const pruneBelow = state.tick - 400;
     for (const t of Object.keys(state.rollback.inputHistory)) {
       if (+t < pruneBelow) delete state.rollback.inputHistory[t];
     }
@@ -151,7 +151,7 @@ export function recordPrediction(tick, slot) {
 
 // ── State hash for desync detection ──────────────────────────────────────────
 
-export function entityHash(entities) {
+export function entityHash(entities, extraState) {
   let h = 0;
   for (const e of entities) {
     if (e.dead) continue;
@@ -159,5 +159,29 @@ export function entityHash(entities) {
     h = (h ^ (h >>> 13)) * 1540483477;
     h = h >>> 0;
   }
+  if (extraState) {
+    for (let f = 0; f < 3; f++) {
+      h ^= Math.round(extraState.credits[f]) * (31337 * (f + 1));
+      h = (h ^ (h >>> 13)) * 1540483477;
+      h = h >>> 0;
+    }
+    h ^= (extraState.rng.getState() * 7919) >>> 0;
+    h = (h ^ (h >>> 13)) * 1540483477;
+    h ^= extraState.shells.length * 104729;
+    h = h >>> 0;
+  }
   return h;
+}
+
+// Apply a state dump from the host to resync after a desync event.
+export function applyStateDump(snap) {
+  restoreSnapshot(snap);
+  state.isRollingBack = false;
+  if (state.rollback) {
+    state.rollback._stallStart = null;
+    state.rollback.buffer[snap.tick % state.rollback.buffer.length] = saveSnapshot();
+    for (const t of Object.keys(state.rollback.inputHistory)) {
+      if (+t <= snap.tick) delete state.rollback.inputHistory[t];
+    }
+  }
 }

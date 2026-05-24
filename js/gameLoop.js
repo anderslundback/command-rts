@@ -83,7 +83,7 @@ function _shouldStall() {
     if (!inputs || !(slot in inputs)) {
       const now = performance.now();
       if (rb._stallStart == null) rb._stallStart = now;
-      if (now - rb._stallStart < 200) return true; // stall up to 200ms wall-clock
+      if (now - rb._stallStart < Math.max(200, (state.net?.latencyMs ?? 0) * 1.5)) return true;
       rb._stallStart = null; // timeout — accept misprediction, let rollback handle it
       return false;
     }
@@ -165,7 +165,7 @@ function gameTick() {
   }
 
   if (state.rollback && !state.isRollingBack && state.tick % 20 === 0) {
-    net.send({ type: 'state_hash', tick: state.tick, hash: entityHash(state.entities) });
+    net.send({ type: 'state_hash', tick: state.tick, hash: entityHash(state.entities, state) });
   }
 }
 

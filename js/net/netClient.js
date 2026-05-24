@@ -1,4 +1,5 @@
 import { uiStore } from '../store.js';
+import { state } from '../state.js';
 
 // ── Callback registry (populated by game.js to avoid circular imports) ────────
 const _cb = {};
@@ -112,5 +113,16 @@ net.on('desync', () => {
 
 // Latency measurement
 net.on('pong', msg => {
-  uiStore.setState(st => ({ net: { ...st.net, latencyMs: Date.now() - (msg.t ?? 0) } }));
+  const latencyMs = Date.now() - (msg.t ?? 0);
+  uiStore.setState(st => ({ net: { ...st.net, latencyMs } }));
+  if (state.net) state.net.latencyMs = latencyMs;
+});
+
+// Server-triggered resync: host dumps full state; non-hosts apply it
+net.on('resync_request', msg => {
+  _cb.handleResyncRequest?.(msg.sourceSlot);
+});
+
+net.on('state_dump', msg => {
+  _cb.handleStateDump?.(msg.snap);
 });

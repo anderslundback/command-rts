@@ -13,7 +13,7 @@ import { clampCam } from './input.js';
 import { syncFromGameState } from './store.js';
 import { net, registerGameCallbacks } from './net/netClient.js';
 import { applyCommand } from './commands.js';
-import { onRemoteInput } from './lockstep.js';
+import { onRemoteInput, saveSnapshot, applyStateDump } from './lockstep.js';
 import { initFog, updateFog } from './fog.js';
 import { loop, _gameTick, recordPower, resetAccumulator } from './gameLoop.js';
 
@@ -51,7 +51,7 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
   for (let slot = 0; slot < slotFactions.length; slot++) {
     if (slot !== mySlot && slotFactions[slot] != null && !aiSlots[slot]) humanSlots.add(slot);
   }
-  state.rollback = { buffer: new Array(64).fill(null), inputHistory: {}, predictions: {}, humanSlots, _stallStart: null };
+  state.rollback = { buffer: new Array(256).fill(null), inputHistory: {}, predictions: {}, humanSlots, _stallStart: null };
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
   _resetGameState(myFaction, [1000, 2000, 2000]);
 
@@ -268,5 +268,14 @@ registerGameCallbacks({
     setMsg(`${msg.name} has left the game`, 300);
     const faction = state.net?.slotFactions?.[msg.slot];
     if (faction != null && !state.AI[faction]) state.AI[faction] = makeAI(faction);
+  },
+  handleResyncRequest: (sourceSlot) => {
+    if (state.net?.mySlot !== sourceSlot) return;
+    const snap = saveSnapshot();
+    net.send({ type: 'state_dump', tick: snap.tick, snap });
+  },
+  handleStateDump: (snap) => {
+    if (state.net?.mySlot === 0) return; // host is the source, doesn't apply its own dump
+    applyStateDump(snap);
   },
 });
