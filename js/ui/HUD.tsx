@@ -1,7 +1,10 @@
-import React from 'react';
-import { useUIStore, SyncDebugState } from '../store';
+import React, { useState, useCallback } from 'react';
+import { useUIStore, SyncDebugState, syncFromGameState } from '../store';
 // @ts-ignore
 import { FDATA } from '../constants.js';
+// @ts-ignore
+import { state as _gsRaw } from '../state.js';
+const _gs: any = _gsRaw;
 
 const SPEED_LABELS = ['SLOWEST', 'SLOW', 'NORMAL', 'FAST', 'FASTEST'];
 
@@ -20,8 +23,22 @@ export function HUD(): React.ReactElement {
   const netStall = useUIStore(s => s.netStall);
   const syncDebug = useUIStore(s => s.syncDebug);
 
+  const [debugOpen, setDebugOpen] = useState(false);
+
+  const toggleDebug = useCallback(() => {
+    setDebugOpen(prev => {
+      const opening = !prev;
+      if (opening && _gs.syncDebug) {
+        _gs.syncDebug.hasWarning = false;
+        syncFromGameState();
+      }
+      return opening;
+    });
+  }, []);
+
   const fd = FDATA[playerFaction] as { name: string; color: string };
   const powerOk = powerGen >= powerUsed;
+  const hasWarning = !!syncDebug?.hasWarning;
 
   return (
     <>
@@ -133,14 +150,45 @@ export function HUD(): React.ReactElement {
 
       {/* FPS counter */}
       <span style={{ color: '#445', fontSize: 10 }}>{fps} FPS</span>
+
+      {/* Debug panel toggle — only in net games */}
+      {syncDebug && (
+        <button
+          onClick={toggleDebug}
+          style={{
+            background: debugOpen ? '#1a2a1a' : 'none',
+            border: `1px solid ${debugOpen ? '#3a6' : '#223'}`,
+            color: debugOpen ? '#3a6' : '#334',
+            cursor: 'pointer',
+            fontSize: 9,
+            padding: '1px 5px',
+            letterSpacing: 1,
+            position: 'relative',
+          }}
+        >
+          DBG
+          {!debugOpen && hasWarning && (
+            <span style={{
+              position: 'absolute',
+              top: -3,
+              right: -3,
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: '#fa0',
+              display: 'block',
+            }} />
+          )}
+        </button>
+      )}
     </div>
-    {syncDebug && netState.role !== 'none' && <SyncDebugPanel debug={syncDebug} />}
+    {syncDebug && debugOpen && <SyncDebugPanel debug={syncDebug} />}
     </>
   );
 }
 
 function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElement {
-  const { entityH, creditsH, rngH, shellH, tick, resyncs, lastDesyncTick, diverged } = debug;
+  const { entityH, creditsH, rngH, shellH, mapH, tick, resyncs, lastDesyncTick, diverged, stallCount, nullsSent, log } = debug;
   const hex = (n: number) => '0x' + (n >>> 0).toString(16).toUpperCase().padStart(8, '0');
   const diff = (k: string) => diverged.includes(k);
   return (
@@ -148,7 +196,7 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
       position: 'fixed',
       bottom: 8,
       left: 8,
-      background: 'rgba(0,0,0,0.82)',
+      background: 'rgba(0,0,0,0.88)',
       border: '1px solid #1a2230',
       padding: '6px 10px',
       fontFamily: 'monospace',
@@ -158,20 +206,31 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
       zIndex: 30,
       pointerEvents: 'none',
       userSelect: 'none',
+      minWidth: 220,
     }}>
-      <div style={{ color: '#334', marginBottom: 2, letterSpacing: 1 }}>SYNC DEBUG</div>
+      <div style={{ color: '#557', marginBottom: 2, letterSpacing: 1 }}>SYNC DEBUG</div>
       <div>tick {tick}{'  '}resyncs: <span style={{ color: resyncs > 0 ? '#f44' : '#8ab' }}>{resyncs}</span></div>
-      {resyncs > 0 && <div style={{ color: '#556' }}>last desync t{lastDesyncTick}</div>}
-      {(['entityH', 'creditsH', 'rngH', 'shellH'] as const).map(k => {
-        const val = { entityH, creditsH, rngH, shellH }[k];
-        const label = { entityH: 'entity ', creditsH: 'credits', rngH: 'rng    ', shellH: 'shells ' }[k];
+      <div>stalls: <span style={{ color: stallCount > 0 ? '#fa0' : '#3a8' }}>{stallCount}</span>{'  '}nulls: {nullsSent}</div>
+      {(['entityH', 'creditsH', 'rngH', 'shellH', 'mapH'] as const).map(k => {
+        const val = { entityH, creditsH, rngH, shellH, mapH }[k];
+        const label = { entityH: 'entity ', creditsH: 'credits', rngH: 'rng    ', shellH: 'shells ', mapH: 'map    ' }[k];
         const isDiff = diff(k);
         return (
-          <div key={k} style={{ color: isDiff ? '#f44' : '#8ab' }}>
+          <div key={k} style={{ color: isDiff ? '#f44' : '#556' }}>
             {label}{'  '}{hex(val)}{isDiff ? '  ◄ DIFF' : ''}
           </div>
         );
       })}
+      {log && log.length > 0 && (
+        <>
+          <div style={{ color: '#334', marginTop: 4, marginBottom: 1 }}>── events ──</div>
+          {log.map((line, i) => (
+            <div key={i} style={{ color: line.includes('DESYNC') ? '#f44' : line.includes('STALL') || line.includes('TIMEOUT') ? '#fa0' : '#557' }}>
+              {line}
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }

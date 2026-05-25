@@ -113,6 +113,11 @@ net.on('desync', msg => {
     state.syncDebug.resyncs++;
     state.syncDebug.lastDesyncTick = msg.tick ?? 0;
     state.syncDebug.diverged = msg.diverged ?? [];
+    const fields = (msg.diverged ?? []).join(',') || 'unknown';
+    state.syncDebug.log ??= [];
+    state.syncDebug.log.push(`t${msg.tick} DESYNC [${fields}]`);
+    if (state.syncDebug.log.length > 8) state.syncDebug.log.shift();
+    state.syncDebug.hasWarning = true;
   }
 });
 

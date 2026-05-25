@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { Building, Unit } from './entities.js';
+import { Building, Unit, getEid, setEid } from './entities.js';
 import { net } from './net/netClient.js';
 import { applyCommand } from './commands.js';
 import { uiStore } from './store.js';
@@ -9,6 +9,7 @@ import { uiStore } from './store.js';
 export function saveSnapshot() {
   return {
     tick: state.tick,
+    eid: getEid(),
     rngState: state.rng.getState(),
     entities: state.entities.map(snapshotEnt),
     credits: [...state.credits],
@@ -26,6 +27,7 @@ export function saveSnapshot() {
     statusMsg: state.statusMsg,
     statusTimer: state.statusTimer,
     gameSpeed: state.gameSpeed,
+    aiTimers: state.AI.map(ai => ai ? { btimer: ai.btimer, wtimer: ai.wtimer, htimer: ai.htimer } : null),
   };
 }
 
@@ -44,6 +46,7 @@ function snapshotEnt(e) {
 }
 
 export function restoreSnapshot(snap) {
+  if (snap.eid != null) setEid(snap.eid);
   state.rng.setState(snap.rngState);
   state.tick = snap.tick;
   state.entities = snap.entities.map(restoreEnt);
@@ -68,6 +71,15 @@ export function restoreSnapshot(snap) {
   state.statusMsg = snap.statusMsg;
   state.statusTimer = snap.statusTimer;
   state.gameSpeed = snap.gameSpeed ?? 2;
+  if (snap.aiTimers) {
+    for (let i = 0; i < 3; i++) {
+      if (state.AI[i] && snap.aiTimers[i]) {
+        state.AI[i].btimer = snap.aiTimers[i].btimer;
+        state.AI[i].wtimer = snap.aiTimers[i].wtimer;
+        state.AI[i].htimer = snap.aiTimers[i].htimer;
+      }
+    }
+  }
 }
 
 function restoreEnt(s) {
@@ -126,11 +138,7 @@ function rollbackAndReplay(fromTick, toTick, simulateTickFn) {
   restoreSnapshot(snap);
 
   for (let t = fromTick; t <= toTick; t++) {
-    const inputs = state.rollback.inputHistory[t] ?? {};
-    for (const cmd of Object.values(inputs)) {
-      if (cmd) applyCommand(cmd);
-    }
-    simulateTickFn(); // increments state.tick and stores snapshot internally
+    simulateTickFn(); // increments state.tick, applies inputHistory[tick], stores snapshot
   }
 
   state.isRollingBack = false;
@@ -176,6 +184,22 @@ export function entityHash(entities, extraState) {
     h = (h ^ (h >>> 13)) * 1540483477;
     h ^= extraState.shells.length * 104729;
     h = h >>> 0;
+  }
+  return h;
+}
+
+export function mapHash() {
+  const map = state.map;
+  let h = 0;
+  for (let y = 0; y < map.length; y++) {
+    const row = map[y];
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] !== 0) { // skip GRASS (most tiles)
+        h ^= (y * 80 + x) * 1000003 ^ (row[x] * 999983);
+        h = (h ^ (h >>> 13)) * 1540483477;
+        h = h >>> 0;
+      }
+    }
   }
   return h;
 }

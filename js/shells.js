@@ -2,6 +2,7 @@ import { TS } from './constants.js';
 import { state } from './state.js';
 import { dealDmg, dealSplash } from './combat.js';
 import { spawnExplosion } from './particles.js';
+import { playExplosion } from './audio.js';
 
 const PROPS = {
   artillery: { speed: 2.5, r: 4.5, color: '#e8c060' },
@@ -37,6 +38,11 @@ export function updateShells() {
       const count = sh.type === 'gunship' ? 18 : 12;
       spawnExplosion(sh.tx, sh.ty, '#ffaa22', count);
       spawnExplosion(sh.tx, sh.ty, '#ff5500', count / 2);
+      if (!state.isRollingBack) {
+        const cx = sh.tx - state.cam.x, cy = sh.ty - state.cam.y;
+        const onScreen = cx > -64 && cy > -64 && cx < state.canvas.width + 64 && cy < state.canvas.height + 64;
+        if (onScreen) playExplosion();
+      }
       state.shells.splice(i, 1);
     } else {
       sh.x += (dx / dist) * sh.speed;

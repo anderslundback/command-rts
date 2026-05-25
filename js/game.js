@@ -21,16 +21,23 @@ export { TICK_MS_TABLE } from './gameLoop.js';
 
 // ── Skirmish (single-player vs AI) ───────────────────────────────────────────
 
-export function startGame(pf) {
+export function startGame(pf, aiFactions = null) {
   state.net = null;
   state.rng = makeLCG((Math.random() * 0xffffffff) >>> 0);
   _resetGameState(pf, [1000, 2000, 2000]);
 
   genMap();
   _populateOreHistory();
+
+  const opponents = aiFactions ?? [0, 1, 2].filter(f => f !== pf);
+  const slotFactions = [null, null, null];
+  slotFactions[pf] = pf;
+  for (const f of opponents) slotFactions[f] = f;
+  for (let f = 0; f < 3; f++) if (slotFactions[f] == null) state.factionEliminated[f] = true;
+
   state.AI = [null, null, null];
-  for (let i = 0; i < 3; i++) if (i !== pf) state.AI[i] = makeAI(i);
-  _placeStartingEntities([0, 1, 2]);
+  for (const f of opponents) state.AI[f] = makeAI(f);
+  _placeStartingEntities(slotFactions);
   calcPower();
   initFog();
   updateFog();
@@ -53,7 +60,7 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
   }
   state.rollback = { buffer: new Array(256).fill(null), inputHistory: {}, predictions: {}, humanSlots, _stallStart: null };
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
-  state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [] };
+  state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, mapH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [], stallCount: 0, nullsSent: 0, log: [], hasWarning: false };
   _resetGameState(myFaction, [1000, 2000, 2000]);
 
   genMapFromSeed(mapSeed);

@@ -2,6 +2,7 @@ import { BDEF, UDEF } from './constants.js';
 import { state } from './state.js';
 import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderStop, orderHarvest } from './orders.js';
 import { placeBuilding, deployMcvInPlace } from './placement.js';
+import { playTrainingStart, playCancel, playBuildStart } from './audio.js';
 
 export function applyCommand(cmd) {
   switch (cmd.action) {
@@ -28,7 +29,7 @@ export function applyCommand(cmd) {
       break;
     }
     case 'place': {
-      const placed = placeBuilding(cmd.faction, cmd.btype, cmd.tx, cmd.ty, true);
+      const placed = placeBuilding(cmd.faction, cmd.btype, cmd.tx, cmd.ty, true, true);
       if (placed) {
         for (const q of [state.hudBuildQueue[cmd.faction], state.hudDefQueue[cmd.faction]]) {
           const idx = q.findIndex(it => it.type === cmd.btype && it.ready);
@@ -39,7 +40,10 @@ export function applyCommand(cmd) {
     }
     case 'queue_build': {
       const q = cmd.queueType === 'def' ? state.hudDefQueue[cmd.faction] : state.hudBuildQueue[cmd.faction];
-      if (q) q.push({ type: cmd.btype, t: 0, total: (BDEF[cmd.btype]?.btime ?? 20) * 60, paid: 0, ready: false });
+      if (q) {
+        q.push({ type: cmd.btype, t: 0, total: (BDEF[cmd.btype]?.btime ?? 20) * 60, paid: 0, ready: false });
+        if (!state.isRollingBack && cmd.faction === state.playerFaction) playBuildStart();
+      }
       break;
     }
     case 'cancel_build': {
@@ -47,13 +51,16 @@ export function applyCommand(cmd) {
       if (q && cmd.index < q.length) {
         state.credits[cmd.faction] += BDEF[q[cmd.index].type]?.cost ?? 0;
         q.splice(cmd.index, 1);
+        if (!state.isRollingBack && cmd.faction === state.playerFaction) playCancel();
       }
       break;
     }
     case 'queue_train': {
       const b = state.entById.get(cmd.bldgId);
-      if (b && b.trainQ && b.trainQ.length < 5)
+      if (b && b.trainQ && b.trainQ.length < 5) {
         b.trainQ.push({ type: cmd.utype, t: 0, total: (UDEF[cmd.utype]?.ttime ?? 20) * 60 });
+        if (!state.isRollingBack && b.faction === state.playerFaction) playTrainingStart();
+      }
       break;
     }
     case 'cancel_train': {
@@ -61,6 +68,7 @@ export function applyCommand(cmd) {
       if (b && b.trainQ && cmd.index < b.trainQ.length) {
         state.credits[b.faction] += UDEF[b.trainQ[cmd.index].type]?.cost ?? 0;
         b.trainQ.splice(cmd.index, 1);
+        if (!state.isRollingBack && b.faction === state.playerFaction) playCancel();
       }
       break;
     }

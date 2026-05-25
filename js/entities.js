@@ -3,6 +3,8 @@ import { state } from './state.js';
 
 let _eid = 1;
 export function resetEid() { _eid = 1; }
+export function getEid() { return _eid; }
+export function setEid(v) { _eid = v; }
 
 export class Ent {
   constructor(f, x, y) {

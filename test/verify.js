@@ -108,6 +108,52 @@ assert('empty entity list hashes to 0', entityHash([]) === 0);
 const swapped = [ents[1], ents[0]];
 assert('entity order affects hash', entityHash(swapped) !== h1);
 
+// ── Rollback credit invariant ─────────────────────────────────────────────────
+// Simulates the snapshot timing bug: if a snapshot is taken BEFORE entity
+// updates, a rollback skips one tick of credit deductions.
+// The correct invariant: snapshot at tick T must include T's credit deductions.
+
+console.log('\nRollback credit invariant');
+
+function simCredit(startCredits, deductPerTick, ticks) {
+  let c = startCredits;
+  const snapshots = {}; // tick → credits AFTER that tick's deduction
+  for (let t = 1; t <= ticks; t++) {
+    c -= deductPerTick;
+    snapshots[t] = c; // snapshot AFTER deductions (correct timing)
+  }
+  return { final: c, snapshots };
+}
+
+function rollbackFrom(snapshots, fromTick, toTick, deductPerTick) {
+  // Restore snapshot[fromTick-1], re-simulate fromTick..toTick
+  let c = snapshots[fromTick - 1];
+  for (let t = fromTick; t <= toTick; t++) {
+    c -= deductPerTick;
+  }
+  return c;
+}
+
+const { final, snapshots } = simCredit(1000, 5, 10);
+// Rollback from tick 8 to tick 10: should end at same final value
+const rolledBack = rollbackFrom(snapshots, 8, 10, 5);
+assert('rollback from correct snapshot reaches same final credits', rolledBack === final);
+
+// Simulate the OLD bug: snapshot taken BEFORE deductions
+function simCreditBuggy(startCredits, deductPerTick, ticks) {
+  let c = startCredits;
+  const snapshots = {};
+  for (let t = 1; t <= ticks; t++) {
+    snapshots[t] = c; // snapshot BEFORE deductions (buggy)
+    c -= deductPerTick;
+  }
+  return { final: c, snapshots };
+}
+
+const { final: finalB, snapshots: snapshotsB } = simCreditBuggy(1000, 5, 10);
+const rolledBackBuggy = rollbackFrom(snapshotsB, 8, 10, 5);
+assert('buggy pre-deduction snapshot causes divergence on rollback', rolledBackBuggy !== finalB);
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} checks: ${passed} passed, ${failed} failed`);

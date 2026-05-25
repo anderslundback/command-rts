@@ -121,7 +121,9 @@ loop() [requestAnimationFrame / setTimeout when tab hidden]
 
 **Desync detection:** Every 20 ticks in multiplayer, each client sends `{ type: 'state_hash', tick, hash }` to the server. The server compares hashes across clients and broadcasts `{ type: 'desync' }` on mismatch. `entityHash` in `lockstep.js` XORs position and HP of all live entities.
 
-**Multiplayer command flow:** `scheduleInput(cmd)` in `netClient.js` applies the command immediately, records it in `rollback.inputHistory[tick][mySlot]`, and sends it to the server. Remote inputs arrive via the `'input'` WebSocket message, are stored in `inputHistory`, and trigger `onRemoteInput` which calls `rollbackAndReplay` if the tick was already simulated with a wrong prediction.
+**Multiplayer command flow:** `scheduleInput(cmd)` in `netClient.js` records the command in `rollback.inputHistory[tick+1][mySlot]` and sends it to the server. The command is applied during the next `gameTick` via the `inputHistory` loop — NOT immediately. Remote inputs arrive via the `'input'` WebSocket message, are stored in `inputHistory`, and trigger `onRemoteInput` which calls `rollbackAndReplay` if the tick was already simulated with a wrong prediction.
+
+**Rollback snapshot timing:** `storeTickSnapshot()` is called at the **end** of `gameTick`, after all entity updates (unit movement, building queues, credit deductions, `removeDeadEnts`). This is critical — storing it before entity updates means each rollback silently skips one tick's worth of simulation, causing credits and entity state to drift. The snapshot at tick T represents the complete, final state at the end of tick T.
 
 **Circular import prevention:** `combat.js`, `orders.js`, `pathfinding.js`, `resources.js` don't import from `units.js`/`buildings.js`. `netClient.js` ↔ `game.js` avoid circular dependency via `registerGameCallbacks()`.
 

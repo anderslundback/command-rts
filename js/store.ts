@@ -83,10 +83,15 @@ export interface SyncDebugState {
   creditsH: number;
   rngH: number;
   shellH: number;
+  mapH: number;
   tick: number;
   resyncs: number;
   lastDesyncTick: number;
   diverged: string[];
+  stallCount: number;
+  nullsSent: number;
+  log: string[];
+  hasWarning: boolean;
 }
 
 // ── Store shape ──────────────────────────────────────────────────────────────

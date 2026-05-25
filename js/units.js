@@ -16,15 +16,12 @@ export function updateUnit(u) {
 
   if (u.hitFlash > 0) u.hitFlash--;
 
-  // Depot repair: player vehicles must be idle on the pad; AI uses adjacency
+  // Depot repair: vehicle must be idle on the pad (consistent for all factions — deterministic in multiplayer)
   if (VEHICLE_TYPES.has(u.type) && u.hp < u.maxHp) {
     if (state.tick % 3 === 0 && hasPwr(u.faction)) {
-      const isPlayer = u.faction === state.playerFaction;
       const depot = state.entities.find(e => !e.dead && e.isBuilding && e.faction === u.faction &&
         e.type === 'depot' && e.done &&
-        (isPlayer
-          ? (u.state === 'idle' && u.x >= e.x && u.x < e.x + e.w && u.y >= e.y && u.y < e.y + e.h)
-          : adjToBuilding(u.x, u.y, e)));
+        u.state === 'idle' && u.x >= e.x && u.x < e.x + e.w && u.y >= e.y && u.y < e.y + e.h);
       if (depot && state.credits[u.faction] >= 0.15) {
         state.credits[u.faction] -= 0.15;
         u.hp = Math.min(u.maxHp, u.hp + 2);
@@ -349,16 +346,15 @@ function stepPath(u) {
         blocker.faction !== u.faction && blocker.armorType === 'infantry') {
       dealDmg(blocker, blocker.maxHp + 1, u);
     } else {
-      // If blocker is moving, wait for it to clear rather than re-pathing immediately
-      if (blocker.path && blocker.path.length > 0) {
-        u.blockWait = (u.blockWait || 0) + 1;
-        if (u.blockWait < 16) return;
-      }
+      const waitLimit = (blocker.path && blocker.path.length > 0) ? 16 : 8;
+      u.blockWait = (u.blockWait || 0) + 1;
+      if (u.blockWait < waitLimit) return;
       u.blockWait = 0;
       // Stagger re-path by unit id so adjacent units don't oscillate in sync
       if ((state.tick + (u.id % 13)) % 15 === 0) {
         const dest = u.path[u.path.length - 1];
-        u.path = astar(u.x, u.y, dest.x, dest.y, false);
+        const np = astar(u.x, u.y, dest.x, dest.y, false);
+        u.path = np.length ? np : astar(u.x, u.y, dest.x, dest.y, true);
         u.mprog = 0;
       }
       return;

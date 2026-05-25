@@ -47,13 +47,11 @@ export function updateBuilding(b) {
       e => !e.dead && e.isBuilding && e.faction === b.faction && e.type === b.type && e.done
     ).length);
 
-    if (b.faction === state.playerFaction) {
-      const installment = (UDEF[item.type].cost / item.total) * speedMult;
-      if (state.credits[b.faction] >= installment) {
-        state.credits[b.faction] -= installment;
-      } else {
-        advance = false;
-      }
+    const installment = (UDEF[item.type].cost / item.total) * speedMult;
+    if (state.credits[b.faction] >= installment) {
+      state.credits[b.faction] -= installment;
+    } else {
+      advance = false;
     }
 
     if (advance) {

@@ -70,7 +70,7 @@ wss.on('connection', ws => {
         const room = {
           hostWs: ws,
           slots: new Map([[0, ws]]),
-          players: [player, makeAiPlayer(1, 1), makeAiPlayer(2, 2)],
+          players: [player, makeEmptySlot(1), makeEmptySlot(2)],
           gameStarted: false,
         };
         rooms.set(code, room);
@@ -234,7 +234,7 @@ wss.on('connection', ws => {
             // Find which components diverged
             const debugEntries = entries.map(e => e.debug).filter(Boolean);
             const diverged = debugEntries.length >= 2
-              ? ['entityH', 'creditsH', 'rngH', 'shellH'].filter(
+              ? ['entityH', 'creditsH', 'rngH', 'shellH', 'mapH'].filter(
                   k => !debugEntries.every(d => d[k] === debugEntries[0][k])
                 )
               : [];

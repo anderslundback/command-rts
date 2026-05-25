@@ -13,7 +13,7 @@ import { speak } from './audio.js';
 import { syncFromGameState } from './store.js';
 import { net } from './net/netClient.js';
 import { applyCommand } from './commands.js';
-import { storeTickSnapshot, entityHash } from './lockstep.js';
+import { storeTickSnapshot, entityHash, mapHash } from './lockstep.js';
 
 export const TICK_MS_TABLE = [125, 83, 50, 33, 25];
 let _accumulator = 0;
@@ -37,6 +37,7 @@ export function loop() {
   }
 
   if (state.gameStarted) {
+    _sendNullInput(); // prime the buffer every frame before stall check
     const tickMs = TICK_MS_TABLE[state.gameSpeed ?? 2];
     const dt = _lastLoopTime > 0 ? Math.min(now - _lastLoopTime, 200) : 0;
     _accumulator += dt;
@@ -44,6 +45,7 @@ export function loop() {
       if (_shouldStall()) break;
       gameTick();
       _accumulator -= tickMs;
+      _sendNullInput();
     }
   }
   _lastLoopTime = now;
@@ -54,7 +56,7 @@ export function loop() {
   if (state.gameStarted) syncFromGameState();
 
   const tickMsAlpha = TICK_MS_TABLE[state.gameSpeed ?? 2];
-  const alpha = state.gameStarted ? _accumulator / tickMsAlpha : 0;
+  const alpha = state.gameStarted ? Math.min(1, _accumulator / tickMsAlpha) : 0;
   _applyRenderAlpha(alpha);
   render();
   renderMinimap();
@@ -72,6 +74,34 @@ export function _gameTick() { gameTick(); }
 // Hold the simulation if we haven't yet received a human remote player's input for the
 // next tick. This avoids the misprediction → rollback cycle for normal-latency connections.
 // Give up after 200ms so a lagging/disconnecting player doesn't freeze the game.
+function _sendNullInput() {
+  if (!state.rollback || state.isRollingBack || !state.net) return;
+  const mySlot = state.net.mySlot;
+  const ih = state.rollback.inputHistory;
+  // Send 6 ticks ahead so the other side always has a buffer
+  for (let i = 1; i <= 6; i++) {
+    const t = state.tick + i;
+    ih[t] ??= {};
+    if (!(mySlot in ih[t])) {
+      ih[t][mySlot] = null;
+      net.send({ type: 'input', tick: t, slot: mySlot, cmd: null });
+      if (state.syncDebug) state.syncDebug.nullsSent = (state.syncDebug.nullsSent ?? 0) + 1;
+    }
+  }
+}
+
+const WARN_PREFIXES = ['STALL', 'TIMEOUT', 'DESYNC'];
+
+function _netLog(msg, important = false) {
+  if (!state.syncDebug) return;
+  const entry = `t${state.tick} ${msg}`;
+  state.syncDebug.log.push(entry);
+  if (state.syncDebug.log.length > 8) state.syncDebug.log.shift();
+  if (important || WARN_PREFIXES.some(p => msg.startsWith(p))) {
+    state.syncDebug.hasWarning = true;
+  }
+}
+
 function _shouldStall() {
   const rb = state.rollback;
   if (!rb || state.replayMode || !state.net) return false;
@@ -82,14 +112,43 @@ function _shouldStall() {
   for (const slot of humanSlots) {
     if (!inputs || !(slot in inputs)) {
       const now = performance.now();
-      if (rb._stallStart == null) rb._stallStart = now;
-      if (now - rb._stallStart < Math.max(200, (state.net?.latencyMs ?? 0) * 1.5)) return true;
-      rb._stallStart = null; // timeout — accept misprediction, let rollback handle it
+      if (rb._stallStart == null) {
+        rb._stallStart = now;
+        if (state.syncDebug) state.syncDebug.stallCount = (state.syncDebug.stallCount ?? 0) + 1;
+        _netLog(`STALL#${state.syncDebug?.stallCount} waiting slot${slot} for t${nextTick}`);
+      }
+      const elapsed = now - rb._stallStart;
+      const timeout = Math.max(200, (state.net?.latencyMs ?? 0) * 1.5);
+      if (elapsed < timeout) {
+        _updateNetDiag({ stalling: true, stallTick: nextTick, stallSlot: slot, stallMs: Math.round(elapsed) });
+        return true;
+      }
+      _netLog(`TIMEOUT after ${Math.round(elapsed)}ms t${nextTick} — misprediction accepted`);
+      rb._stallStart = null;
       return false;
     }
   }
   rb._stallStart = null;
   return false;
+}
+
+function _updateNetDiag(extra) {
+  const rb = state.rollback;
+  window.__netDiag = {
+    tick: state.tick,
+    stallCount: state.syncDebug?.stallCount ?? 0,
+    nullsSent: state.syncDebug?.nullsSent ?? 0,
+    humanSlots: rb ? [...(rb.humanSlots ?? [])] : [],
+    inputHistoryAhead: rb ? (() => {
+      let ahead = 0;
+      for (let t = state.tick + 1; t <= state.tick + 10; t++) {
+        if (rb.inputHistory[t] && [...(rb.humanSlots ?? [])].every(s => s in rb.inputHistory[t])) ahead++;
+        else break;
+      }
+      return ahead;
+    })() : 0,
+    ...extra,
+  };
 }
 
 function gameTick() {
@@ -121,7 +180,6 @@ function gameTick() {
         }
       }
     }
-    storeTickSnapshot();
   }
 
   if (!state.gameOver) {
@@ -164,14 +222,18 @@ function gameTick() {
     }
   }
 
+  if (state.rollback) storeTickSnapshot();
+
   if (state.rollback && !state.isRollingBack && state.tick % 20 === 0) {
     const entityH = entityHash(state.entities);
     const creditsH = ((Math.round(state.credits[0]) * 31337) ^ (Math.round(state.credits[1]) * 62674) ^ (Math.round(state.credits[2]) * 94011)) >>> 0;
     const rngH = state.rng.getState() >>> 0;
     const shellH = state.shells.length;
+    const mapH = mapHash();
     const fullHash = entityHash(state.entities, state);
-    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, tick: state.tick });
-    net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH } });
+    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, mapH, tick: state.tick });
+    window.__syncDebug = state.syncDebug ? { ...state.syncDebug } : null;
+    net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH, mapH } });
   }
 }
 

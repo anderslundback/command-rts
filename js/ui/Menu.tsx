@@ -105,6 +105,32 @@ interface FactionDef {
   light: string;
 }
 
+function SmallFactionButton({
+  index, fd, selected, disabled, onSelect,
+}: {
+  index: number; fd: FactionDef; selected: boolean; disabled?: boolean; onSelect: (i: number) => void;
+}): React.ReactElement {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <button
+      onClick={() => !disabled && onSelect(index)}
+      onMouseEnter={() => !disabled && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: selected ? fd.dark : (hovered ? '#0a1020' : '#06080e'),
+        border: `2px solid ${selected ? fd.color : (hovered && !disabled ? fd.color : '#1a2230')}`,
+        color: selected ? fd.color : (disabled ? '#2a3040' : '#667'),
+        fontFamily: "'Courier New', monospace",
+        fontSize: 11, fontWeight: 'bold', letterSpacing: 2,
+        padding: '8px 0', cursor: disabled ? 'not-allowed' : 'pointer',
+        flex: 1, transition: 'all 0.1s',
+      }}
+    >
+      {fd.name}
+    </button>
+  );
+}
+
 function FactionButton({
   index,
   fd,
@@ -148,14 +174,33 @@ export function Menu(): React.ReactElement {
   const gameStats = useUIStore(s => s.gameStats);
 
   const bootMsg = useUIStore(s => s.bootMsg);
-  const [subPhase, setSubPhase] = React.useState<'main' | 'skirmish' | 'join'>('main');
+  const [subPhase, setSubPhase] = React.useState<'main' | 'skirmish_lobby' | 'join'>('main');
   const [joinCode, setJoinCode] = React.useState('');
   const [playerName, setPlayerName] = React.useState('');
   const [netError, setNetError] = React.useState('');
 
-  const handleFactionSelect = (i: number) => {
+  const [skirmishPlayerFaction, setSkirmishPlayerFaction] = React.useState(0);
+  const [skirmishNumOpponents, setSkirmishNumOpponents] = React.useState(2);
+  const [skirmishAiFactions, setSkirmishAiFactions] = React.useState<[number, number]>([1, 2]);
+
+  const handleSkirmishPlayerFaction = (f: number) => {
+    setSkirmishPlayerFaction(f);
+    const avail = [0, 1, 2].filter(x => x !== f);
+    setSkirmishAiFactions([avail[0], avail[1]]);
+  };
+
+  const handleSkirmishAiFaction = (aiIdx: number, f: number) => {
+    const next = [...skirmishAiFactions] as [number, number];
+    const other = aiIdx === 0 ? 1 : 0;
+    if (next[other] === f) next[other] = next[aiIdx]; // swap to avoid duplicate
+    next[aiIdx] = f;
+    setSkirmishAiFactions(next);
+  };
+
+  const handleSkirmishStart = () => {
+    const ai = skirmishAiFactions.slice(0, skirmishNumOpponents) as number[];
     // @ts-ignore
-    import('../game.js').then((m: any) => m.startGame(i)).catch(console.error);
+    import('../game.js').then((m: any) => m.startGame(skirmishPlayerFaction, ai)).catch(console.error);
   };
 
   const handleReturnToMenu = () => {
@@ -292,7 +337,7 @@ export function Menu(): React.ReactElement {
                 <button
                   key={label}
                   onClick={() => {
-                    if (i === 0) setSubPhase('skirmish');
+                    if (i === 0) setSubPhase('skirmish_lobby');
                     else if (i === 1) handleCreateGame();
                     else setSubPhase('join');
                   }}
@@ -339,24 +384,78 @@ export function Menu(): React.ReactElement {
             </div>
           )}
 
-          {subPhase === 'skirmish' && (
-            <>
-              <div style={{ color: '#668', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>SELECT YOUR FACTION</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {subPhase === 'skirmish_lobby' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, width: 300 }}>
+              <div style={{ color: '#668', fontSize: 11, letterSpacing: 2 }}>YOUR FACTION</div>
+              <div style={{ display: 'flex', gap: 6 }}>
                 {(FDATA as FactionDef[]).map((fd, i) => (
-                  <FactionButton key={i} index={i} fd={fd} onSelect={handleFactionSelect} />
+                  <SmallFactionButton key={i} index={i} fd={fd}
+                    selected={skirmishPlayerFaction === i}
+                    onSelect={handleSkirmishPlayerFaction} />
                 ))}
               </div>
-              <button
-                onClick={() => setSubPhase('main')}
-                style={{
-                  marginTop: 12, background: 'transparent', border: 'none', color: '#446',
-                  fontFamily: "'Courier New', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: 1,
-                }}
+
+              <div style={{ color: '#668', fontSize: 11, letterSpacing: 2, marginTop: 4 }}>OPPONENTS</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[0, 1, 2].map(n => (
+                  <button key={n} onClick={() => setSkirmishNumOpponents(n)} style={{
+                    background: skirmishNumOpponents === n ? '#0d1a28' : '#06080e',
+                    border: `2px solid ${skirmishNumOpponents === n ? '#4af' : '#1a2230'}`,
+                    color: skirmishNumOpponents === n ? '#4af' : '#446',
+                    fontFamily: "'Courier New', monospace", fontSize: 16, fontWeight: 'bold',
+                    padding: '8px 0', cursor: 'pointer', flex: 1,
+                  }}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+
+              {skirmishNumOpponents > 0 && (
+                <>
+                  <div style={{ color: '#668', fontSize: 11, letterSpacing: 2, marginTop: 4 }}>AI FACTIONS</div>
+                  {Array.from({ length: skirmishNumOpponents }, (_, aiIdx) => (
+                    <div key={aiIdx} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{
+                        color: '#446', fontFamily: 'monospace', fontSize: 10,
+                        letterSpacing: 1, width: 28, flexShrink: 0,
+                      }}>
+                        AI {aiIdx + 1}
+                      </span>
+                      <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                        {(FDATA as FactionDef[]).map((fd, i) => {
+                          const taken = i === skirmishPlayerFaction ||
+                            (aiIdx === 1 && i === skirmishAiFactions[0]);
+                          return (
+                            <SmallFactionButton key={i} index={i} fd={fd}
+                              selected={skirmishAiFactions[aiIdx] === i}
+                              disabled={taken}
+                              onSelect={(f) => handleSkirmishAiFaction(aiIdx, f)} />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              <button onClick={handleSkirmishStart} style={{
+                marginTop: 8,
+                background: '#06080e', border: '2px solid #4af', color: '#4af',
+                fontFamily: "'Courier New', monospace", fontSize: 14, fontWeight: 'bold',
+                letterSpacing: 3, padding: '12px 32px', cursor: 'pointer',
+              }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#8cf'; (e.currentTarget as HTMLButtonElement).style.color = '#8cf'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#4af'; (e.currentTarget as HTMLButtonElement).style.color = '#4af'; }}
               >
+                START GAME
+              </button>
+              <button onClick={() => setSubPhase('main')} style={{
+                background: 'transparent', border: 'none', color: '#446',
+                fontFamily: "'Courier New', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: 1,
+              }}>
                 ← BACK
               </button>
-            </>
+            </div>
           )}
 
           {subPhase === 'join' && (
