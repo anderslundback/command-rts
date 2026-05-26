@@ -9,6 +9,7 @@ import { state as _gameState } from '../state.js';
 const _gs: any = _gameState;
 
 declare const __WS_URL__: string;
+declare const __APP_VERSION__: string;
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -306,9 +307,12 @@ export function Menu(): React.ReactElement {
       {phase === 'menu' && (
         <>
           <div
-            style={{ fontSize: 42, fontWeight: 'bold', letterSpacing: 10, color: '#4af', textShadow: '0 0 24px #4af8', marginBottom: 8 }}
+            style={{ fontSize: 42, fontWeight: 'bold', letterSpacing: 10, color: '#4af', textShadow: '0 0 24px #4af8', marginBottom: 4 }}
           >
             COMMAND
+          </div>
+          <div style={{ color: '#334', fontSize: 10, letterSpacing: 3, marginBottom: 8 }}>
+            v{__APP_VERSION__}
           </div>
 
           {bootMsg && (
