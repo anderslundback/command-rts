@@ -60,7 +60,7 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
   for (let slot = 0; slot < slotFactions.length; slot++) {
     if (slot !== mySlot && slotFactions[slot] != null && !aiSlots[slot]) humanSlots.add(slot);
   }
-  state.rollback = { buffer: new Array(256).fill(null), inputHistory: {}, predictions: {}, humanSlots, _stallStart: null };
+  state.rollback = { buffer: new Array(256).fill(null), inputHistory: {}, predictions: {}, replayLog: {}, humanSlots, _stallStart: null };
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
   state.mapSeed = mapSeed;
   state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, mapH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [], stallCount: 0, nullsSent: 0, log: [], hasWarning: false };
@@ -131,13 +131,7 @@ export function setGameSpeed(index) {
 export function saveReplay() {
   if (!state.rollback || !state.net) return;
   const { mapSeed, slotFactions, aiSlots } = state.net;
-  const compactInputs = {};
-  for (const [tick, slots] of Object.entries(state.rollback.inputHistory)) {
-    const nonNull = {};
-    for (const [slot, cmd] of Object.entries(slots)) { if (cmd != null) nonNull[slot] = cmd; }
-    if (Object.keys(nonNull).length) compactInputs[tick] = nonNull;
-  }
-  const data = { version: 1, endTick: state.tick, mapSeed, slotFactions, aiSlots, inputs: compactInputs };
+  const data = { version: 1, endTick: state.tick, mapSeed, slotFactions, aiSlots, inputs: state.rollback.replayLog };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = `replay_${Date.now()}.json`; a.click();

@@ -103,6 +103,8 @@ export function scheduleInput(cmd) {
   const tick = state.tick;
   state.rollback.inputHistory[tick] ??= {};
   state.rollback.inputHistory[tick][state.net.mySlot] = cmd;
+  state.rollback.replayLog[tick] ??= {};
+  state.rollback.replayLog[tick][state.net.mySlot] = cmd;
   net.send({ type: 'input', tick, slot: state.net.mySlot, cmd });
 }
 
@@ -113,6 +115,10 @@ export function onRemoteInput(tick, slot, cmd, _applyCmd, simulateTickFn) {
   state.rollback.inputHistory[tick] ??= {};
   const predicted = state.rollback.inputHistory[tick][slot]; // null = predicted no-input; undefined = future tick
   state.rollback.inputHistory[tick][slot] = cmd ?? null;
+  if (cmd != null) {
+    state.rollback.replayLog[tick] ??= {};
+    state.rollback.replayLog[tick][slot] = cmd;
+  }
 
   // Only rollback if the tick has already been simulated and the prediction was wrong
   const mispredicted = tick <= state.tick && JSON.stringify(predicted ?? null) !== JSON.stringify(cmd ?? null);
