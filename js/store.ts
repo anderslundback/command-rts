@@ -139,6 +139,7 @@ export interface UIState {
   desync: boolean;
   netStall: boolean;
   syncDebug: SyncDebugState | null;
+  bugReportOpen: boolean;
 }
 
 // ── Initial state ────────────────────────────────────────────────────────────
@@ -174,6 +175,7 @@ const initialState: UIState = {
   desync: false,
   netStall: false,
   syncDebug: null,
+  bugReportOpen: false,
 };
 
 // ── Zustand vanilla store ────────────────────────────────────────────────────

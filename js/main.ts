@@ -8,6 +8,10 @@ import { state as _state } from './state.js';
 const state: any = _state;
 // @ts-ignore
 import { initInput, clampCam } from './input.js';
+// @ts-ignore
+import { initRingBuffer, retryPendingReport } from './bugReport.js';
+
+initRingBuffer();
 
 function init() {
   createRoot(document.getElementById('ui-root')!).render(React.createElement(App));
@@ -19,6 +23,7 @@ function init() {
   window.addEventListener('resize', resize);
 
   initInput();
+  retryPendingReport();
 
   // Push a sentinel so the browser has a "back" target that stays on this page.
   history.pushState(null, '', location.href);

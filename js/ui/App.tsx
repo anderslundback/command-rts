@@ -5,9 +5,11 @@ import { Sidebar } from './Sidebar';
 import { Menu } from './Menu';
 import { PauseMenu } from './PauseMenu';
 import { LobbyScreen } from './LobbyScreen';
+import { BugReportModal } from './BugReportModal';
 
 export function App(): React.ReactElement {
   const phase = useUIStore(s => s.phase);
+  const bugReportOpen = useUIStore(s => s.bugReportOpen);
 
   return (
     <div
@@ -31,6 +33,8 @@ export function App(): React.ReactElement {
       {phase === 'lobby' && <LobbyScreen />}
 
       {phase === 'paused' && <PauseMenu />}
+
+      {bugReportOpen && <BugReportModal />}
     </div>
   );
 }

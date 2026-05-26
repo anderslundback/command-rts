@@ -5,6 +5,8 @@ import { FDATA } from '../constants.js';
 // @ts-ignore
 import { state as _gsRaw } from '../state.js';
 const _gs: any = _gsRaw;
+// @ts-ignore
+import { openBugReport } from '../bugReport.js';
 
 const SPEED_LABELS = ['SLOWEST', 'SLOW', 'NORMAL', 'FAST', 'FASTEST'];
 
@@ -158,6 +160,19 @@ export function HUD(): React.ReactElement {
 
       {/* FPS counter */}
       <span style={{ color: '#445', fontSize: 10 }}>{fps} FPS</span>
+
+      {/* Bug report */}
+      <button
+        onClick={openBugReport}
+        title="Report a bug"
+        style={{
+          background: 'none', border: '1px solid #1e1a20',
+          color: '#443', cursor: 'pointer', fontSize: 9,
+          padding: '1px 5px', letterSpacing: 1,
+        }}
+      >
+        BUG
+      </button>
 
       {/* Debug panel toggle — only in net games */}
       {syncDebug && (
