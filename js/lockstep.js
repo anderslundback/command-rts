@@ -222,4 +222,9 @@ export function applyStateDump(snap) {
       if (+t <= snap.tick) delete state.rollback.inputHistory[t];
     }
   }
+  uiStore.setState({ desync: false });
+  if (state.syncDebug) {
+    state.syncDebug.diverged = [];
+    state.syncDebug.hasWarning = false;
+  }
 }
