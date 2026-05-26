@@ -24,6 +24,7 @@ export { TICK_MS_TABLE } from './gameLoop.js';
 export function startGame(pf, aiFactions = null, mapSeed = null) {
   const seed = mapSeed ?? ((Math.random() * 0xffffffff) >>> 0);
   state.net = null;
+  state.syncDebug = null;
   state.mapSeed = seed;
   state.rng = makeLCG(seed);
   _resetGameState(pf, [1500, 1500, 1500]);
@@ -103,6 +104,7 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
 
 export function showMenu() {
   state.net = null;
+  state.syncDebug = null;
   state.gameStarted = false;
   state.gameOver = false;
   state.paused = false;
