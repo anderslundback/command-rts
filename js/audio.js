@@ -2,6 +2,30 @@ const synth = window.speechSynthesis ?? null;
 
 let _actx = null;
 let _master = null;
+let _cache = null;
+
+function _initCache(c) {
+  function noise(dur, fill) {
+    const len = (c.sampleRate * dur) | 0;
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    fill(buf.getChannelData(0), len);
+    return buf;
+  }
+  _cache = {
+    rifleman:   noise(0.08,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * Math.max(0, 1 - i/n*5); }),
+    tank:       noise(0.18,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * Math.max(0, 1 - i/n*2.2); }),
+    rocketeer:  noise(0.22,  (d, n) => { for (let i = 0; i < n; i++) { const t = i/n; d[i] = (Math.random()*2-1)*Math.max(0,1-t*3.5)*(1-t); } }),
+    burst:      noise(0.06,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * Math.max(0, 1 - i/n*6); }),
+    artillery:  noise(0.35,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * Math.max(0, 1 - i/n*1.4); }),
+    rocket:     noise(0.55,  (d, n) => { for (let i = 0; i < n; i++) { const t = i/n; d[i] = (Math.random()*2-1)*Math.exp(-t*2.5)*(0.6+0.4*t); } }),
+    crack:      noise(0.04,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*(1-i/n); }),
+    gunship:    noise(0.28,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * Math.max(0, 1 - i/n*1.8); }),
+    fighter:    noise(0.12,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * Math.max(0, 1 - i/n*5); }),
+    buildClunk: noise(0.08,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*Math.exp(-i/n*18); }),
+    explosion:  noise(0.60,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*Math.exp(-i/n*4); }),
+    expCrack:   noise(0.05,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*(1-i/n); }),
+  };
+}
 
 function getCtx() {
   if (!_actx) {
@@ -9,6 +33,7 @@ function getCtx() {
     _master = _actx.createGain();
     _master.gain.value = 0.5;
     _master.connect(_actx.destination);
+    _initCache(_actx);
   }
   return _actx;
 }
@@ -17,112 +42,68 @@ export function setVolume(v) {
   if (_master) _master.gain.value = v;
 }
 
+// Play a cached buffer through a filter+gain chain; auto-disconnects when done.
+function _play(c, buf, fltType, fltFreq, fltQ, gainVal) {
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const flt = c.createBiquadFilter();
+  flt.type = fltType;
+  flt.frequency.value = fltFreq;
+  if (fltQ != null) flt.Q.value = fltQ;
+  const g = c.createGain();
+  g.gain.value = gainVal;
+  src.connect(flt); flt.connect(g); g.connect(_master);
+  src.onended = () => { src.disconnect(); flt.disconnect(); g.disconnect(); };
+  src.start();
+  return { src, flt, g };
+}
+
+// Play a cached buffer through just a gain (no filter); auto-disconnects when done.
+function _playDry(c, buf, gainVal) {
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const g = c.createGain();
+  g.gain.value = gainVal;
+  src.connect(g); g.connect(_master);
+  src.onended = () => { src.disconnect(); g.disconnect(); };
+  src.start();
+}
+
 export function playShot(type) {
   try {
     const c = getCtx();
     if (type === 'rifleman' || type === 'soldier') {
-      const buf = c.createBuffer(1, (c.sampleRate * 0.08) | 0, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 5);
-      const src = c.createBufferSource();
-      src.buffer = buf;
-      const flt = c.createBiquadFilter();
-      flt.type = 'bandpass'; flt.frequency.value = 1800; flt.Q.value = 0.6;
-      const g = c.createGain(); g.gain.value = 0.35;
-      src.connect(flt); flt.connect(g); g.connect(_master);
-      src.start();
+      _play(c, _cache.rifleman, 'bandpass', 1800, 0.6, 0.35);
     } else if (type === 'tank') {
-      const buf = c.createBuffer(1, (c.sampleRate * 0.18) | 0, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 2.2);
-      const src = c.createBufferSource();
-      src.buffer = buf;
-      const flt = c.createBiquadFilter();
-      flt.type = 'lowpass'; flt.frequency.value = 420;
-      const g = c.createGain(); g.gain.value = 0.55;
-      src.connect(flt); flt.connect(g); g.connect(_master);
-      src.start();
+      _play(c, _cache.tank, 'lowpass', 420, null, 0.55);
     } else if (type === 'rocketeer') {
-      // Whoosh launch + distant thump
-      const buf = c.createBuffer(1, (c.sampleRate * 0.22) | 0, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) {
-        const t = i / d.length;
-        d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - t * 3.5) * (1 - t);
-      }
-      const src = c.createBufferSource();
-      src.buffer = buf;
-      const flt = c.createBiquadFilter();
-      flt.type = 'bandpass'; flt.frequency.value = 600; flt.Q.value = 0.5;
-      const g = c.createGain(); g.gain.value = 0.5;
-      src.connect(flt); flt.connect(g); g.connect(_master);
-      src.start();
+      _play(c, _cache.rocketeer, 'bandpass', 600, 0.5, 0.5);
     } else if (type === 'turret' || type === 'antiair' || type === 'aatrack') {
       for (let shot = 0; shot < 3; shot++) {
         setTimeout(() => {
-          try {
-            const c2 = getCtx();
-            const buf = c2.createBuffer(1, (c2.sampleRate * 0.06) | 0, c2.sampleRate);
-            const d = buf.getChannelData(0);
-            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 6);
-            const src = c2.createBufferSource();
-            src.buffer = buf;
-            const flt = c2.createBiquadFilter();
-            flt.type = 'bandpass'; flt.frequency.value = 2200; flt.Q.value = 0.9;
-            const g = c2.createGain(); g.gain.value = 0.28;
-            src.connect(flt); flt.connect(g); g.connect(_master);
-            src.start();
-          } catch (_) {}
+          try { _play(getCtx(), _cache.burst, 'bandpass', 2200, 0.9, 0.28); } catch (_) {}
         }, shot * 75);
       }
     } else if (type === 'artillery') {
-      // Heavy cannon boom
-      const buf = c.createBuffer(1, (c.sampleRate * 0.35) | 0, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 1.4);
-      const src = c.createBufferSource(); src.buffer = buf;
-      const flt = c.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 180;
-      const g = c.createGain(); g.gain.value = 0.7;
-      src.connect(flt); flt.connect(g); g.connect(_master); src.start();
+      _play(c, _cache.artillery, 'lowpass', 180, null, 0.7);
     } else if (type === 'v2rocket' || type === 'tomahawk') {
       // Rocket launch: rising whoosh + ignition crack
-      const len = (c.sampleRate * 0.55) | 0;
-      const buf = c.createBuffer(1, len, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) {
-        const t = i / len;
-        d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 2.5) * (0.6 + 0.4 * t);
-      }
-      const src = c.createBufferSource(); src.buffer = buf;
-      const flt = c.createBiquadFilter(); flt.type = 'bandpass'; flt.Q.value = 1.0;
-      const now2 = c.currentTime;
-      flt.frequency.setValueAtTime(180, now2);
-      flt.frequency.exponentialRampToValueAtTime(2400, now2 + 0.45);
+      const src = c.createBufferSource();
+      src.buffer = _cache.rocket;
+      const flt = c.createBiquadFilter();
+      flt.type = 'bandpass'; flt.Q.value = 1.0;
+      const now = c.currentTime;
+      flt.frequency.setValueAtTime(180, now);
+      flt.frequency.exponentialRampToValueAtTime(2400, now + 0.45);
       const g = c.createGain(); g.gain.value = 0.65;
-      src.connect(flt); flt.connect(g); g.connect(_master); src.start();
-      // Sharp ignition crack at start
-      const crack = c.createBuffer(1, (c.sampleRate * 0.04) | 0, c.sampleRate);
-      const cd = crack.getChannelData(0);
-      for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / cd.length);
-      const cs = c.createBufferSource(); cs.buffer = crack;
-      const cg = c.createGain(); cg.gain.value = 0.5;
-      cs.connect(cg); cg.connect(_master); cs.start();
+      src.connect(flt); flt.connect(g); g.connect(_master);
+      src.onended = () => { src.disconnect(); flt.disconnect(); g.disconnect(); };
+      src.start();
+      _playDry(c, _cache.crack, 0.5);
     } else if (type === 'gunship') {
-      const buf = c.createBuffer(1, (c.sampleRate * 0.28) | 0, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 1.8);
-      const src = c.createBufferSource(); src.buffer = buf;
-      const flt = c.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 280;
-      const g = c.createGain(); g.gain.value = 0.65;
-      src.connect(flt); flt.connect(g); g.connect(_master); src.start();
+      _play(c, _cache.gunship, 'lowpass', 280, null, 0.65);
     } else if (type === 'fighter' || type === 'drone' || type === 'scout') {
-      const buf = c.createBuffer(1, (c.sampleRate * 0.12) | 0, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / d.length * 5);
-      const src = c.createBufferSource(); src.buffer = buf;
-      const flt = c.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 2000; flt.Q.value = 0.7;
-      const g = c.createGain(); g.gain.value = 0.32;
-      src.connect(flt); flt.connect(g); g.connect(_master); src.start();
+      _play(c, _cache.fighter, 'bandpass', 2000, 0.7, 0.32);
     }
   } catch (_) {}
 }
@@ -141,6 +122,7 @@ export function playTrainingStart() {
       osc.connect(g); g.connect(_master);
       osc.start(now + delay);
       osc.stop(now + delay + 0.07);
+      osc.onended = () => { osc.disconnect(); g.disconnect(); };
     }
   } catch (_) {}
 }
@@ -158,6 +140,7 @@ export function playCancel() {
     g.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
     osc.connect(g); g.connect(_master);
     osc.start(now); osc.stop(now + 0.15);
+    osc.onended = () => { osc.disconnect(); g.disconnect(); };
   } catch (_) {}
 }
 
@@ -165,16 +148,8 @@ export function playBuildStart() {
   try {
     const c = getCtx();
     const now = c.currentTime;
-    // Metallic clunk
-    const len = (c.sampleRate * 0.08) | 0;
-    const buf = c.createBuffer(1, len, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / len * 18);
-    const src = c.createBufferSource(); src.buffer = buf;
-    const flt = c.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.value = 900; flt.Q.value = 1.2;
-    const g = c.createGain(); g.gain.value = 0.45;
-    src.connect(flt); flt.connect(g); g.connect(_master); src.start(now);
-    // Mechanical tick
+    const { src, flt, g } = _play(c, _cache.buildClunk, 'bandpass', 900, 1.2, 0.45);
+    // Mechanical tick overlay
     const osc = c.createOscillator();
     osc.type = 'square'; osc.frequency.value = 120;
     const og = c.createGain();
@@ -182,6 +157,7 @@ export function playBuildStart() {
     og.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
     osc.connect(og); og.connect(_master);
     osc.start(now + 0.04); osc.stop(now + 0.1);
+    osc.onended = () => { osc.disconnect(); og.disconnect(); };
   } catch (_) {}
 }
 
@@ -190,14 +166,7 @@ export function playExplosion() {
     const c = getCtx();
     const now = c.currentTime;
     // Low boom
-    const len = (c.sampleRate * 0.6) | 0;
-    const buf = c.createBuffer(1, len, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / len * 4);
-    const src = c.createBufferSource(); src.buffer = buf;
-    const flt = c.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 140;
-    const g = c.createGain(); g.gain.value = 0.8;
-    src.connect(flt); flt.connect(g); g.connect(_master); src.start(now);
+    _play(c, _cache.explosion, 'lowpass', 140, null, 0.8);
     // Sub-bass sweep
     const osc = c.createOscillator();
     osc.type = 'sine';
@@ -208,15 +177,9 @@ export function playExplosion() {
     og.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
     osc.connect(og); og.connect(_master);
     osc.start(now); osc.stop(now + 0.42);
+    osc.onended = () => { osc.disconnect(); og.disconnect(); };
     // Mid crack
-    const clen = (c.sampleRate * 0.05) | 0;
-    const cbuf = c.createBuffer(1, clen, c.sampleRate);
-    const cd = cbuf.getChannelData(0);
-    for (let i = 0; i < clen; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / clen);
-    const cs = c.createBufferSource(); cs.buffer = cbuf;
-    const cf = c.createBiquadFilter(); cf.type = 'bandpass'; cf.frequency.value = 1200; cf.Q.value = 0.8;
-    const cg = c.createGain(); cg.gain.value = 0.6;
-    cs.connect(cf); cf.connect(cg); cg.connect(_master); cs.start(now);
+    _play(c, _cache.expCrack, 'bandpass', 1200, 0.8, 0.6);
   } catch (_) {}
 }
 
@@ -233,6 +196,7 @@ export function playCash() {
       osc.connect(g); g.connect(_master);
       osc.start(now + delay);
       osc.stop(now + delay + dur + 0.01);
+      osc.onended = () => { osc.disconnect(); g.disconnect(); };
     }
   } catch (_) {}
 }
