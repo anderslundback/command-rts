@@ -158,6 +158,10 @@ function renderDamageNumbers(ctx) {
   ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'center';
   for (const d of state.damageNumbers) {
+    if (state.fog?.visible) {
+      const idx = ((d.y / TS) | 0) * MW + ((d.x / TS) | 0);
+      if (!state.fog.visible[idx]) continue;
+    }
     ctx.globalAlpha = Math.max(0, 1 - d.age / 50);
     ctx.fillStyle = '#ff4444';
     ctx.fillText(d.val, d.x, d.y);

@@ -4,7 +4,7 @@ import { getEnt, getEntAt } from './entities.js';
 import { getTile } from './map.js';
 import { T } from './constants.js';
 import { astar } from './pathfinding.js';
-import { canPlace, placeBuilding, deployMcvInPlace } from './placement.js';
+import { canPlace, placeBuilding, deployMcvInPlace, spawnNear } from './placement.js';
 import { nearestRefinery, calcPower } from './resources.js';
 import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderHarvest } from './orders.js';
 import { setMsg, updateBuildPanel, switchTab } from './hud.js';
@@ -222,6 +222,10 @@ function onClick(ev) {
         for (const q of [state.hudBuildQueue[f], state.hudDefQueue[f]]) {
           const idx = q.findIndex(it => it.type === state.buildMode && it.ready);
           if (idx >= 0) { q.splice(idx, 1); break; }
+        }
+        if (state.buildMode === 'refinery') {
+          const harv = spawnNear(f, 'harvester', placed);
+          if (harv) orderHarvest(harv, placed);
         }
       }
     }
