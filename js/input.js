@@ -9,6 +9,7 @@ import { nearestRefinery, calcPower } from './resources.js';
 import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderHarvest } from './orders.js';
 import { setMsg, updateBuildPanel, switchTab } from './hud.js';
 import { scheduleInput } from './net/netClient.js';
+import { syncFromGameState } from './store.js';
 
 const RED_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cline x1='16' y1='2' x2='16' y2='30' stroke='%23ff2222' stroke-width='2'/%3E%3Cline x1='2' y1='16' x2='30' y2='16' stroke='%23ff2222' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='none' stroke='%23ff2222' stroke-width='2'/%3E%3C/svg%3E") 16 16, crosshair`;
 
@@ -101,7 +102,11 @@ function onMouseUp(ev) {
 
 function onClick(ev) {
   if (ev.button !== 0 || !state.gameStarted || state.gameOver) return;
-  if (state.paused) { import('./game.js').then(m => m.togglePause()); return; }
+  if (state.menuOpen) { state.menuOpen = false; syncFromGameState(); return; }
+  if (state.paused) {
+    if (!state.net) import('./game.js').then(m => m.togglePause());
+    return;
+  }
   if (state._skipNextClick) { state._skipNextClick = false; return; }
 
   const r = state.canvas.getBoundingClientRect();
@@ -312,7 +317,7 @@ function onRightClick(ev) {
   if (!state.gameStarted || state.gameOver) return;
   if (state.replayMode) return;
 
-  if (state.paused) {
+  if (state.paused && !state.net) {
     const f = state.playerFaction;
     const bq = state.hudBuildQueue[f];
     const dq = state.hudDefQueue[f];
@@ -464,6 +469,26 @@ function onKey(ev) {
   if (state.paused && ev.key !== 'Escape') return;
   const SPD = 80;
   if (ev.key === 'Escape') {
+    if (state.net) {
+      // Multiplayer: never pause via keyboard; Escape toggles the in-game menu overlay
+      if (state.paused) {
+        // Net-paused: only toggle menu visibility (resume requires the RESUME button)
+        state.menuOpen = !state.menuOpen;
+        syncFromGameState();
+        return;
+      }
+      if (state.atkMoveMode) { state.atkMoveMode = false; state.canvas.style.cursor = 'default'; return; }
+      if (state.patrolMode) { state.patrolMode = false; state.canvas.style.cursor = 'default'; return; }
+      if (state.forceAtkMode) { state.forceAtkMode = false; state.canvas.style.cursor = 'default'; return; }
+      if (state.buildMode || state.repairMode || state.sellMode) {
+        state.buildMode = null; state.buildReady = false; clearModes(); updateBuildPanel(); return;
+      }
+      if (state.selected.length) { state.selected = []; updateBuildPanel(); return; }
+      state.menuOpen = !state.menuOpen;
+      syncFromGameState();
+      return;
+    }
+    // Skirmish: existing layered-cancel → pause behavior
     if (state.paused) { import('./game.js').then(m => m.togglePause()); return; }
     if (state.atkMoveMode) { state.atkMoveMode = false; state.canvas.style.cursor = 'default'; return; }
     if (state.patrolMode) { state.patrolMode = false; state.canvas.style.cursor = 'default'; return; }

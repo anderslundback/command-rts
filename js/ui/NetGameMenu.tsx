@@ -3,33 +3,29 @@ import React, { useState } from 'react';
 import * as _S from '../state.js';
 // @ts-ignore
 import * as _A from '../audio.js';
-import { useUIStore } from '../store';
+import { useUIStore, syncFromGameState } from '../store';
 
 const state: any = (_S as any).state;
 const setVolume: (v: number) => void = (_A as any).setVolume;
 
-export function PauseMenu(): React.ReactElement {
+export function NetGameMenu(): React.ReactElement {
   const [volume, setVolumeState] = useState<number>(() => state.volume ?? 0.5);
-  const netState = useUIStore(s => s.net);
-  const lobby = useUIStore(s => s.lobby);
-  const netPausedBySlot = useUIStore(s => s.netPausedBySlot);
   const netPauseCredits = useUIStore(s => s.netPauseCredits);
-
-  const isNetPause = netState.role !== 'none';
-
-  const pausedByName = isNetPause && netPausedBySlot >= 0
-    ? (lobby?.players.find(p => p.slot === netPausedBySlot)?.name ?? `Player ${netPausedBySlot + 1}`)
-    : null;
+  const lobby = useUIStore(s => s.lobby);
 
   const mySlot: number = state.net?.mySlot ?? 0;
   const myCredits = netPauseCredits[mySlot] ?? 0;
+  const canPause = myCredits > 0;
 
-  const handleResume = () => {
-    if (isNetPause) {
-      import('../game.js').then((m: any) => m.requestNetResume()).catch(console.error);
-    } else {
-      import('../game.js').then((m: any) => m.togglePause()).catch(console.error);
-    }
+  const handleClose = () => {
+    state.menuOpen = false;
+    syncFromGameState();
+  };
+
+  const handlePause = () => {
+    if (!canPause) return;
+    handleClose();
+    import('../game.js').then((m: any) => m.requestNetPause()).catch(console.error);
   };
 
   const handleQuit = () => {
@@ -48,7 +44,7 @@ export function PauseMenu(): React.ReactElement {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.72)',
+        background: 'rgba(0,0,0,0.6)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -61,24 +57,15 @@ export function PauseMenu(): React.ReactElement {
     >
       <div
         style={{
-          fontSize: 32,
+          fontSize: 24,
           fontWeight: 'bold',
           letterSpacing: 8,
-          color: '#fc4',
-          textShadow: '0 0 20px #fc48',
+          color: '#8ab',
+          textShadow: '0 0 16px #8ab4',
         }}
       >
-        PAUSED
+        MENU
       </div>
-
-      {pausedByName && (
-        <div style={{ color: '#668', fontSize: 11, letterSpacing: 2 }}>
-          {pausedByName} paused the game
-          {myCredits < 3 && (
-            <span style={{ color: '#445' }}> — {myCredits} pause{myCredits !== 1 ? 's' : ''} remaining</span>
-          )}
-        </div>
-      )}
 
       <div
         style={{
@@ -91,11 +78,8 @@ export function PauseMenu(): React.ReactElement {
           padding: '14px 24px',
         }}
       >
-        <label htmlFor="pause-volume" style={{ color: '#668', fontSize: 10, letterSpacing: 2 }}>
-          VOLUME
-        </label>
+        <label style={{ color: '#668', fontSize: 10, letterSpacing: 2 }}>VOLUME</label>
         <input
-          id="pause-volume"
           type="range"
           min={0}
           max={1}
@@ -108,21 +92,29 @@ export function PauseMenu(): React.ReactElement {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <PauseBtn label="RESUME" color="#4d8" onClick={handleResume} />
-        <PauseBtn label="QUIT TO MENU" color="#f64" onClick={handleQuit} />
+        <NetMenuBtn
+          label={canPause ? `PAUSE GAME  (${myCredits} LEFT)` : 'PAUSE GAME  (USED UP)'}
+          color="#fc4"
+          onClick={handlePause}
+          disabled={!canPause}
+        />
+        <NetMenuBtn label="QUIT TO MENU" color="#f64" onClick={handleQuit} />
+        <NetMenuBtn label="CLOSE" color="#4d8" onClick={handleClose} />
       </div>
     </div>
   );
 }
 
-function PauseBtn({
+function NetMenuBtn({
   label,
   color,
   onClick,
+  disabled = false,
 }: {
   label: string;
   color: string;
   onClick: () => void;
+  disabled?: boolean;
 }): React.ReactElement {
   const [hovered, setHovered] = React.useState(false);
 
@@ -131,17 +123,18 @@ function PauseBtn({
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      disabled={disabled}
       style={{
-        background: hovered ? '#0a1018' : '#06080e',
-        border: `2px solid ${hovered ? color : '#1a2230'}`,
-        color: hovered ? color : '#8ab',
+        background: hovered && !disabled ? '#0a1018' : '#06080e',
+        border: `2px solid ${hovered && !disabled ? color : '#1a2230'}`,
+        color: disabled ? '#334' : hovered ? color : '#8ab',
         fontFamily: "'Courier New', monospace",
         fontSize: 13,
         fontWeight: 'bold',
         letterSpacing: 3,
         padding: '10px 36px',
-        cursor: 'pointer',
-        width: 220,
+        cursor: disabled ? 'default' : 'pointer',
+        width: 260,
         transition: 'all 0.1s',
       }}
     >

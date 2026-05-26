@@ -4,12 +4,14 @@ import { HUD } from './HUD';
 import { Sidebar } from './Sidebar';
 import { Menu } from './Menu';
 import { PauseMenu } from './PauseMenu';
+import { NetGameMenu } from './NetGameMenu';
 import { LobbyScreen } from './LobbyScreen';
 import { BugReportModal } from './BugReportModal';
 
 export function App(): React.ReactElement {
   const phase = useUIStore(s => s.phase);
   const bugReportOpen = useUIStore(s => s.bugReportOpen);
+  const menuOpen = useUIStore(s => s.menuOpen);
 
   return (
     <div
@@ -32,6 +34,7 @@ export function App(): React.ReactElement {
 
       {phase === 'lobby' && <LobbyScreen />}
 
+      {phase === 'playing' && menuOpen && <NetGameMenu />}
       {phase === 'paused' && <PauseMenu />}
 
       {bugReportOpen && <BugReportModal />}

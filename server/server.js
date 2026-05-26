@@ -152,7 +152,7 @@ function broadcast(room, msg, excludeWs = null) {
 }
 
 function lobbyUpdate(room) {
-  broadcast(room, { type: 'lobby_update', players: room.players });
+  broadcast(room, { type: 'lobby_update', players: room.players, gameSpeed: room.gameSpeed ?? 4 });
 }
 
 function makeAiPlayer(slot, faction) {
@@ -188,6 +188,7 @@ wss.on('connection', ws => {
           slots: new Map([[0, ws]]),
           players: [player, makeEmptySlot(1), makeEmptySlot(2)],
           gameStarted: false,
+          gameSpeed: 4,
         };
         rooms.set(code, room);
         clients.set(ws, { code, slot: 0 });
@@ -218,8 +219,8 @@ wss.on('connection', ws => {
         room.slots.set(slot, ws);
         clients.set(ws, { code, slot });
 
-        send(ws, { type: 'room_joined', code, slot, players: room.players });
-        broadcast(room, { type: 'lobby_update', players: room.players }, ws);
+        send(ws, { type: 'room_joined', code, slot, players: room.players, gameSpeed: room.gameSpeed ?? 4 });
+        lobbyUpdate(room);
         break;
       }
 
@@ -314,7 +315,7 @@ wss.on('connection', ws => {
         const slotFactions = room.players.map(p => p.isEmpty ? null : p.faction);
         const aiSlots = room.players.map(p => !p.isEmpty && p.isAI);
         room.mapSeed = mapSeed; room.slotFactions = slotFactions; room.aiSlots = aiSlots;
-        broadcast(room, { type: 'game_start', mapSeed, slotFactions, aiSlots });
+        broadcast(room, { type: 'game_start', mapSeed, slotFactions, aiSlots, gameSpeed: room.gameSpeed ?? 4 });
         room.gameStarted = true;
         break;
       }
@@ -389,6 +390,31 @@ wss.on('connection', ws => {
         room.spectators.add(ws);
         clients.set(ws, { code, slot: -1, isSpectator: true });
         send(ws, { type: 'spectate_ok', mapSeed: room.mapSeed, slotFactions: room.slotFactions, aiSlots: room.aiSlots });
+        break;
+      }
+
+      case 'lobby_speed': {
+        if (!meta) return;
+        const room = rooms.get(meta.code);
+        if (!room || room.hostWs !== ws || room.gameStarted) break;
+        room.gameSpeed = Math.max(0, Math.min(4, msg.speed | 0));
+        lobbyUpdate(room);
+        break;
+      }
+
+      case 'net_pause': {
+        if (!meta) return;
+        const room = rooms.get(meta.code);
+        if (!room || !room.gameStarted) break;
+        broadcast(room, { type: 'net_pause', slot: meta.slot });
+        break;
+      }
+
+      case 'net_resume': {
+        if (!meta) return;
+        const room = rooms.get(meta.code);
+        if (!room || !room.gameStarted) break;
+        broadcast(room, { type: 'net_resume' });
         break;
       }
 

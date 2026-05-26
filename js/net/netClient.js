@@ -1,4 +1,4 @@
-import { uiStore } from '../store.js';
+import { uiStore, syncFromGameState } from '../store.js';
 import { state } from '../state.js';
 
 // ── Callback registry (populated by game.js to avoid circular imports) ────────
@@ -85,7 +85,7 @@ net.on('game_start', msg => {
     phase: 'playing',
     net: { ...st.net, connected: true, role: 'player' },
   }));
-  _cb.startNetGame?.(msg.mapSeed, lobby.mySlot, myFaction, msg.aiSlots, msg.slotFactions);
+  _cb.startNetGame?.(msg.mapSeed, lobby.mySlot, myFaction, msg.aiSlots, msg.slotFactions, msg.gameSpeed ?? 4);
 });
 
 // Player left during game — notify and hand their faction to AI on host
@@ -135,4 +135,21 @@ net.on('resync_request', msg => {
 
 net.on('state_dump', msg => {
   _cb.handleStateDump?.(msg.snap);
+});
+
+net.on('net_pause', msg => {
+  if (!state.net) return;
+  const slot = msg.slot ?? -1;
+  if (slot >= 0 && slot < 3 && state.net.pauseCredits) state.net.pauseCredits[slot]--;
+  state.net.pausedBySlot = slot;
+  state.paused = true;
+  state.menuOpen = false;
+  syncFromGameState();
+});
+
+net.on('net_resume', () => {
+  if (!state.net) return;
+  state.paused = false;
+  state.net.pausedBySlot = -1;
+  syncFromGameState();
 });
