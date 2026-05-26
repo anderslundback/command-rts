@@ -49,8 +49,9 @@ export const state = {
   fpsLastTime: 0,
   fpsSmooth: 60,
   paused: false,
-  gameSpeed: 2, // 0=slowest 1=slow 2=normal 3=fast 4=fastest
+  gameSpeed: 4, // 0=slowest 1=slow 2=normal 3=fast 4=fastest
   volume: 0.5,
+  _dirty: false,
   factionEliminated: [false, false, false],
   gameOverDelay: 0,
   gameStats: { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0, powerHistory: [] },
@@ -63,6 +64,7 @@ export const state = {
   atkMoveMode: false,
   patrolMode: false,
   forceAtkMode: false,
+  menuOpen: false,
   replayMode: false,
   _replayEndTick: 0,
   _lastGroupKey: -1,

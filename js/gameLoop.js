@@ -53,7 +53,7 @@ export function loop() {
   updateParticles();
   let _di = state.damageNumbers.length;
   while (_di--) { const d = state.damageNumbers[_di]; d.age++; d.y -= 0.4; if (d.age >= 50) state.damageNumbers.splice(_di, 1); }
-  if (state.gameStarted) syncFromGameState();
+  if (state.gameStarted && state._dirty) { syncFromGameState(); state._dirty = false; }
 
   const tickMsAlpha = TICK_MS_TABLE[state.gameSpeed ?? 2];
   const alpha = state.gameStarted ? Math.min(1, _accumulator / tickMsAlpha) : 0;
@@ -235,6 +235,8 @@ function gameTick() {
     window.__syncDebug = state.syncDebug ? { ...state.syncDebug } : null;
     net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH, mapH } });
   }
+
+  state._dirty = true;
 }
 
 export function recordPower() {

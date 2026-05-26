@@ -10,7 +10,7 @@ import { makeAI } from './ai.js';
 import { setMsg } from './hud.js';
 import { speak } from './audio.js';
 import { clampCam } from './input.js';
-import { syncFromGameState } from './store.js';
+import { syncFromGameState, uiStore } from './store.js';
 import { net, registerGameCallbacks } from './net/netClient.js';
 import { applyCommand } from './commands.js';
 import { onRemoteInput, saveSnapshot, applyStateDump } from './lockstep.js';
@@ -18,6 +18,9 @@ import { initFog, updateFog } from './fog.js';
 import { loop, _gameTick, recordPower, resetAccumulator } from './gameLoop.js';
 
 export { TICK_MS_TABLE } from './gameLoop.js';
+
+// Stored so we can remove and re-register it across multiple game sessions
+let _netInputHandler = null;
 
 // ── Skirmish (single-player vs AI) ───────────────────────────────────────────
 
@@ -54,18 +57,19 @@ export function startGame(pf, aiFactions = null, mapSeed = null) {
 
 // ── Multiplayer host/client entry ────────────────────────────────────────────
 
-export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) {
+export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions, gameSpeed = 4) {
   state.rng = makeLCG(mapSeed);
   // 64-tick buffer covers ~3.2s at NORMAL speed (50ms/tick), enough for >200ms RTT at all speeds
   const humanSlots = new Set();
   for (let slot = 0; slot < slotFactions.length; slot++) {
     if (slot !== mySlot && slotFactions[slot] != null && !aiSlots[slot]) humanSlots.add(slot);
   }
-  state.rollback = { buffer: new Array(256).fill(null), inputHistory: {}, predictions: {}, replayLog: {}, humanSlots, _stallStart: null };
-  state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
+  state.rollback = { buffer: new Array(64).fill(null), inputHistory: {}, predictions: {}, replayLog: {}, humanSlots, _stallStart: null };
+  state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots, pauseCredits: [3, 3, 3], pausedBySlot: -1 };
   state.mapSeed = mapSeed;
   state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, mapH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [], stallCount: 0, nullsSent: 0, log: [], hasWarning: false };
   _resetGameState(myFaction, [1500, 1500, 1500]);
+  state.gameSpeed = gameSpeed;
 
   genMapFromSeed(mapSeed);
   _populateOreHistory();
@@ -82,7 +86,8 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
   updateFog();
   recordPower();
 
-  net.on('input', msg => {
+  if (_netInputHandler) net.off('input', _netInputHandler);
+  _netInputHandler = msg => {
     if (msg.slot !== state.net.mySlot) {
       if (msg.cmd?.action === 'set_speed') {
         state.gameSpeed = Math.max(0, Math.min(4, msg.cmd.speed));
@@ -91,7 +96,8 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
       }
       onRemoteInput(msg.tick, msg.slot, msg.cmd, applyCommand, _gameTick);
     }
-  });
+  };
+  net.on('input', _netInputHandler);
 
   _centerCamOn(mySlot);
   syncFromGameState();
@@ -103,18 +109,35 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
 // ── Shared lifecycle ──────────────────────────────────────────────────────────
 
 export function showMenu() {
+  if (_netInputHandler) { net.off('input', _netInputHandler); _netInputHandler = null; }
   state.net = null;
   state.syncDebug = null;
+  state.rollback = null;
   state.gameStarted = false;
   state.gameOver = false;
   state.paused = false;
+  state.menuOpen = false;
+  state._dirty = false;
+  uiStore.setState({ desync: false, netStall: false });
   syncFromGameState();
 }
 
 export function togglePause() {
-  if (!state.gameStarted || state.gameOver) return;
+  if (!state.gameStarted || state.gameOver || state.net) return;
   state.paused = !state.paused;
   syncFromGameState();
+}
+
+export function requestNetPause() {
+  if (!state.net || !state.gameStarted || state.gameOver || state.paused) return;
+  const slot = state.net.mySlot;
+  if ((state.net.pauseCredits?.[slot] ?? 0) <= 0) return;
+  import('./net/netClient.js').then(m => m.net.send({ type: 'net_pause', slot }));
+}
+
+export function requestNetResume() {
+  if (!state.net || !state.paused) return;
+  import('./net/netClient.js').then(m => m.net.send({ type: 'net_resume' }));
 }
 
 export function setGameSpeed(index) {
@@ -199,7 +222,9 @@ function _resetGameState(playerFaction, startCredits) {
   state.gameOverDelay = 0;
   state.gameStats = { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0, powerHistory: [] };
   state.paused = false;
-  state.gameSpeed = 2;
+  state.menuOpen = false;
+  state._dirty = false;
+  state.gameSpeed = 4;
   state.credits   = [...startCredits];
   state.powerUsed = [0, 0, 0];
   state.powerGen  = [0, 0, 0];

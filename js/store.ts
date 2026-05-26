@@ -68,6 +68,7 @@ export interface LobbyState {
   mySlot: number;
   isHost: boolean;
   myName: string;
+  lobbyGameSpeed: number;
 }
 
 export interface NetState {
@@ -140,6 +141,9 @@ export interface UIState {
   netStall: boolean;
   syncDebug: SyncDebugState | null;
   bugReportOpen: boolean;
+  menuOpen: boolean;
+  netPauseCredits: [number, number, number];
+  netPausedBySlot: number;
 }
 
 // ── Initial state ────────────────────────────────────────────────────────────
@@ -176,6 +180,9 @@ const initialState: UIState = {
   netStall: false,
   syncDebug: null,
   bugReportOpen: false,
+  menuOpen: false,
+  netPauseCredits: [3, 3, 3],
+  netPausedBySlot: -1,
 };
 
 // ── Zustand vanilla store ────────────────────────────────────────────────────
@@ -283,5 +290,8 @@ export function syncFromGameState(): void {
     mapSeed: s.mapSeed ?? null,
     netStall: !!(s.rollback?._stallStart != null),
     syncDebug: s.syncDebug ? { ...s.syncDebug } : null,
+    menuOpen: s.menuOpen ?? false,
+    netPauseCredits: s.net?.pauseCredits ? ([...s.net.pauseCredits] as [number, number, number]) : [3, 3, 3],
+    netPausedBySlot: s.net?.pausedBySlot ?? -1,
   });
 }

@@ -21,9 +21,9 @@ export function saveSnapshot() {
     factionEliminated: [...state.factionEliminated],
     gameOver: state.gameOver,
     gameOverDelay: state.gameOverDelay,
-    gameStats: { ...state.gameStats, powerHistory: [...state.gameStats.powerHistory] },
+    gameStats: { unitsLost: state.gameStats.unitsLost, enemiesKilled: state.gameStats.enemiesKilled, startTick: state.gameStats.startTick, endTick: state.gameStats.endTick },
     oreHistory: new Set(state.oreHistory),
-    mapRows: state.map.map(row => Array.from(row)),
+    mapRows: state.map.map(row => row.slice()),
     statusMsg: state.statusMsg,
     statusTimer: state.statusTimer,
     gameSpeed: state.gameSpeed,
@@ -60,13 +60,13 @@ export function restoreSnapshot(snap) {
   state.factionEliminated = [...snap.factionEliminated];
   state.gameOver = snap.gameOver;
   state.gameOverDelay = snap.gameOverDelay;
-  state.gameStats = { ...snap.gameStats, powerHistory: [...snap.gameStats.powerHistory] };
+  state.gameStats.unitsLost = snap.gameStats.unitsLost;
+  state.gameStats.enemiesKilled = snap.gameStats.enemiesKilled;
+  state.gameStats.startTick = snap.gameStats.startTick;
+  state.gameStats.endTick = snap.gameStats.endTick;
   state.oreHistory = new Set(snap.oreHistory);
   if (snap.mapRows) {
-    for (let y = 0; y < snap.mapRows.length; y++) {
-      const row = snap.mapRows[y];
-      for (let x = 0; x < row.length; x++) state.map[y][x] = row[x];
-    }
+    for (let y = 0; y < snap.mapRows.length; y++) state.map[y].set(snap.mapRows[y]);
   }
   state.statusMsg = snap.statusMsg;
   state.statusTimer = snap.statusTimer;
@@ -120,8 +120,13 @@ export function onRemoteInput(tick, slot, cmd, _applyCmd, simulateTickFn) {
     state.rollback.replayLog[tick][slot] = cmd;
   }
 
-  // Only rollback if the tick has already been simulated and the prediction was wrong
-  const mispredicted = tick <= state.tick && JSON.stringify(predicted ?? null) !== JSON.stringify(cmd ?? null);
+  // Only rollback if the tick has already been simulated and the prediction was wrong.
+  // Fast-path: both null means predicted correctly (common case — no input that tick).
+  const predVal = predicted ?? null;
+  const cmdVal = cmd ?? null;
+  const mispredicted = tick <= state.tick &&
+    predVal !== cmdVal &&
+    JSON.stringify(predVal) !== JSON.stringify(cmdVal);
 
   if (mispredicted) {
     rollbackAndReplay(tick, state.tick, simulateTickFn);
@@ -154,9 +159,9 @@ function rollbackAndReplay(fromTick, toTick, simulateTickFn) {
 export function storeTickSnapshot() {
   if (!state.rollback) return;
   state.rollback.buffer[state.tick % state.rollback.buffer.length] = saveSnapshot();
-  // Prune old input history to prevent unbounded memory growth (keep last 200 ticks)
-  if (state.tick % 50 === 0) {
-    const pruneBelow = state.tick - 400;
+  // Prune old input history every 64 ticks; keep 128 ticks (2× ring-buffer depth)
+  if (state.tick % 64 === 0) {
+    const pruneBelow = state.tick - 128;
     for (const t of Object.keys(state.rollback.inputHistory)) {
       if (+t < pruneBelow) delete state.rollback.inputHistory[t];
     }
