@@ -5,7 +5,12 @@ export function calcPower() {
     let gen = 0, use = 0;
     for (const e of state.entities) {
       if (e.dead || !e.isBuilding || e.faction !== f || !e.done) continue;
-      e.power > 0 ? (gen += e.power) : (use += -e.power);
+      if (e.power > 0) {
+        const hpRatio = e.hp / e.maxHp;
+        gen += Math.max(1, Math.ceil(e.power * hpRatio));
+      } else {
+        use += -e.power;
+      }
     }
     state.powerGen[f] = gen;
     state.powerUsed[f] = use;
@@ -13,6 +18,11 @@ export function calcPower() {
 }
 
 export function hasPwr(f) { return state.powerGen[f] >= state.powerUsed[f]; }
+
+export function getPowerRatio(f) {
+  if (state.powerUsed[f] === 0) return 1;
+  return Math.min(1, state.powerGen[f] / state.powerUsed[f]);
+}
 
 export function nearestRefinery(f, x, y) {
   let best = null, bd = Infinity;

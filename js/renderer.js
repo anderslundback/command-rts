@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { canPlace } from './placement.js';
 import { renderBuildings } from './renderBuildings.js';
 import { renderUnits } from './renderUnits.js';
+import { hasPwr } from './resources.js';
 
 // Stable per-tile pseudo-random value — same result every frame for a given tx,ty,n
 const _sr = (tx, ty, n) =>
@@ -325,12 +326,13 @@ export function renderMinimap() {
   const hasRadar = state.entities.some(
     e => !e.dead && e.isBuilding && e.faction === pf && e.type === 'radar' && e.done
   );
-  if (!hasRadar) {
+  const radarOnline = hasRadar && hasPwr(pf);
+  if (!radarOnline) {
     const mmx = state.radarCtx, mw = state.radar.width, mh = state.radar.height;
     mmx.fillStyle = '#050810'; mmx.fillRect(0, 0, mw, mh);
     mmx.fillStyle = '#2a3a4a'; mmx.font = 'bold 11px monospace';
     mmx.textAlign = 'center'; mmx.textBaseline = 'middle';
-    mmx.fillText('NO RADAR', mw / 2, mh / 2); mmx.textAlign = 'left';
+    mmx.fillText(hasRadar ? 'RADAR OFFLINE' : 'NO RADAR', mw / 2, mh / 2); mmx.textAlign = 'left';
     return;
   }
   if (!state.minimapDirty && state.tick % 4 !== 0) return;

@@ -1,7 +1,7 @@
 import { BDEF, UDEF, FBONUSES, FDATA } from './constants.js';
 import { state } from './state.js';
 import { getEnt } from './entities.js';
-import { calcPower, hasPwr, nearestRefinery } from './resources.js';
+import { calcPower, hasPwr, nearestRefinery, getPowerRatio } from './resources.js';
 import { dealDmg } from './combat.js';
 import { spawnMuzzle } from './particles.js';
 import { spawnNear, placeBuilding } from './placement.js';
@@ -15,12 +15,17 @@ export function updateBuilding(b) {
 
   if (!b.done) {
     // AI on-site construction only (player buildings are placed as done via sidebar)
-    if (b.btotal > 0) b.bprog += 1 / b.btotal;
+    const pwr = Math.max(0.25, getPowerRatio(b.faction));
+    if (b.btotal > 0) b.bprog += pwr / b.btotal;
     else b.bprog = 1;
     if (b.bprog >= 1) {
       b.bprog = 1;
       calcPower();
       state.minimapDirty = true;
+      if (b.type === 'refinery') {
+        const harv = spawnNear(b.faction, 'harvester', b);
+        if (harv) orderHarvest(harv, b);
+      }
     }
     return;
   }
@@ -46,8 +51,9 @@ export function updateBuilding(b) {
     const speedMult = Math.max(1, state.entities.filter(
       e => !e.dead && e.isBuilding && e.faction === b.faction && e.type === b.type && e.done
     ).length);
+    const pwr = Math.max(0.25, getPowerRatio(b.faction));
 
-    const installment = (UDEF[item.type].cost / item.total) * speedMult;
+    const installment = (UDEF[item.type].cost / item.total) * speedMult * pwr;
     if (state.credits[b.faction] >= installment) {
       state.credits[b.faction] -= installment;
     } else {
@@ -55,7 +61,7 @@ export function updateBuilding(b) {
     }
 
     if (advance) {
-      item.t = Math.min(item.total, item.t + speedMult);
+      item.t = Math.min(item.total, item.t + speedMult * pwr);
       if (item.t >= item.total) {
         b.doorEvent = state.tick; // open door for unit exit animation
         b.trainQ.shift();
@@ -136,12 +142,14 @@ function advanceQueue(q, f) {
   const item = q[0];
   if (item.ready) return; // waiting for player to click PLACE
 
+  const pwr = Math.max(0.25, getPowerRatio(f));
+
   if (item.total > 0) {
-    const installment = BDEF[item.type].cost / item.total;
+    const installment = (BDEF[item.type].cost / item.total) * pwr;
     if (state.credits[f] >= installment) {
       state.credits[f] -= installment;
       item.paid = (item.paid || 0) + installment;
-      item.t++;
+      item.t += pwr;
     }
   } else {
     item.t = 1; item.total = 1;

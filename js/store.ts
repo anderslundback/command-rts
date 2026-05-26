@@ -135,6 +135,7 @@ export interface UIState {
   net: NetState;
   bootMsg: string;
   replayMode: boolean;
+  mapSeed: number | null;
   desync: boolean;
   netStall: boolean;
   syncDebug: SyncDebugState | null;
@@ -169,6 +170,7 @@ const initialState: UIState = {
   net: { connected: false, role: 'none', latencyMs: 0 },
   bootMsg: '',
   replayMode: false,
+  mapSeed: null,
   desync: false,
   netStall: false,
   syncDebug: null,
@@ -276,6 +278,7 @@ export function syncFromGameState(): void {
     trainQueues,
     primaryBuilding: { ...s.primaryBuilding },
     replayMode: s.replayMode ?? false,
+    mapSeed: s.mapSeed ?? null,
     netStall: !!(s.rollback?._stallStart != null),
     syncDebug: s.syncDebug ? { ...s.syncDebug } : null,
   });

@@ -19,6 +19,7 @@ export function HUD(): React.ReactElement {
   const netState = useUIStore(s => s.net);
   const lobby = useUIStore(s => s.lobby);
   const replayMode = useUIStore(s => s.replayMode);
+  const mapSeed = useUIStore(s => s.mapSeed);
   const desync = useUIStore(s => s.desync);
   const netStall = useUIStore(s => s.netStall);
   const syncDebug = useUIStore(s => s.syncDebug);
@@ -145,6 +146,13 @@ export function HUD(): React.ReactElement {
       {netState.role !== 'none' && (
         <span style={{ color: '#3a5060', fontSize: 10, letterSpacing: 1 }}>
           {lobby?.roomCode} NET {netState.latencyMs}ms
+        </span>
+      )}
+
+      {/* Map seed */}
+      {mapSeed != null && netState.role === 'none' && !replayMode && (
+        <span style={{ color: '#334', fontSize: 10, letterSpacing: 1 }}>
+          SEED:{mapSeed.toString(16).toUpperCase().padStart(8, '0')}
         </span>
       )}
 

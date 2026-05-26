@@ -301,6 +301,7 @@ wss.on('connection', ws => {
     if (room.gameStarted) {
       // Notify all players; each client will hand the departed faction to AI locally
       broadcast(room, { type: 'player_left', slot, name });
+      if (room.slots.size === 0) { rooms.delete(meta.code); return; }
     } else {
       // In lobby: replace with AI
       room.players[slot] = makeAiPlayer(slot, room.players[slot]?.faction ?? slot);

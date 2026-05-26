@@ -171,12 +171,13 @@ export function entityHash(entities, extraState) {
   for (const e of entities) {
     if (e.dead) continue;
     h ^= (e.id * 73856093) ^ ((e.hp | 0) * 19349663) ^ (Math.round(e.px) * 83492791) ^ (Math.round(e.py) * 95452411);
+    if (e.ore) h ^= (e.ore * 4256233) >>> 0;
     h = (h ^ (h >>> 13)) * 1540483477;
     h = h >>> 0;
   }
   if (extraState) {
     for (let f = 0; f < 3; f++) {
-      h ^= Math.round(extraState.credits[f]) * (31337 * (f + 1));
+      h ^= (extraState.credits[f] * 100 | 0) * (31337 * (f + 1));
       h = (h ^ (h >>> 13)) * 1540483477;
       h = h >>> 0;
     }

@@ -510,7 +510,7 @@ function TrainTab(): React.ReactElement {
       return;
     }
     const d = UDEF[utype];
-    for (let i = 0; i < count && building.trainQ.length < 5; i++) {
+    for (let i = 0; i < count && building.trainQ.length < 99; i++) {
       building.trainQ.push({
         type: utype,
         t: 0,
@@ -550,7 +550,7 @@ function TrainTab(): React.ReactElement {
           primaryEnt && !primaryEnt.dead && primaryEnt.type === bldgType
             ? primaryEnt
             : done.find((b: any) => b.type === bldgType);
-        const qFull = !building || building.trainQ.length >= 5 || !prereqOk;
+        const qFull = !building || building.trainQ.length >= 99 || !prereqOk;
 
         const activeItem =
           building?.trainQ?.length > 0 && building.trainQ[0].type === utype

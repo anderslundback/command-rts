@@ -182,7 +182,7 @@ export function updateUnit(u) {
       let ref = getEnt(u.refineryId);
       if (!ref || ref.dead) {
         ref = nearestRefinery(u.faction, u.x, u.y);
-        if (ref) u.refineryId = ref.id; else { u.state = 'idle'; break; }
+        if (ref) u.refineryId = ref.id; else break;
       }
       if (adjToBuilding(u.x, u.y, ref)) {
         state.credits[u.faction] += u.ore * FBONUSES[u.faction].creditMult;

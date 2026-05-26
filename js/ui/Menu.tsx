@@ -182,6 +182,7 @@ export function Menu(): React.ReactElement {
   const [skirmishPlayerFaction, setSkirmishPlayerFaction] = React.useState(0);
   const [skirmishNumOpponents, setSkirmishNumOpponents] = React.useState(2);
   const [skirmishAiFactions, setSkirmishAiFactions] = React.useState<[number, number]>([1, 2]);
+  const [skirmishSeed, setSkirmishSeed] = React.useState('');
 
   const handleSkirmishPlayerFaction = (f: number) => {
     setSkirmishPlayerFaction(f);
@@ -199,8 +200,9 @@ export function Menu(): React.ReactElement {
 
   const handleSkirmishStart = () => {
     const ai = skirmishAiFactions.slice(0, skirmishNumOpponents) as number[];
+    const parsedSeed = skirmishSeed.trim() ? (parseInt(skirmishSeed.trim(), 16) >>> 0) : null;
     // @ts-ignore
-    import('../game.js').then((m: any) => m.startGame(skirmishPlayerFaction, ai)).catch(console.error);
+    import('../game.js').then((m: any) => m.startGame(skirmishPlayerFaction, ai, parsedSeed)).catch(console.error);
   };
 
   const handleReturnToMenu = () => {
@@ -437,6 +439,21 @@ export function Menu(): React.ReactElement {
                   ))}
                 </>
               )}
+
+              <div style={{ marginTop: 8 }}>
+                <div style={{ color: '#668', fontSize: 11, letterSpacing: 2, marginBottom: 6 }}>MAP SEED (hex, blank = random)</div>
+                <input
+                  value={skirmishSeed}
+                  onChange={e => setSkirmishSeed(e.target.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 8))}
+                  placeholder="RANDOM"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    background: '#06080e', border: '1px solid #1a2230', color: '#89a',
+                    fontFamily: "'Courier New', monospace", fontSize: 13, letterSpacing: 2,
+                    padding: '6px 8px',
+                  }}
+                />
+              </div>
 
               <button onClick={handleSkirmishStart} style={{
                 marginTop: 8,

@@ -21,12 +21,14 @@ export { TICK_MS_TABLE } from './gameLoop.js';
 
 // ── Skirmish (single-player vs AI) ───────────────────────────────────────────
 
-export function startGame(pf, aiFactions = null) {
+export function startGame(pf, aiFactions = null, mapSeed = null) {
+  const seed = mapSeed ?? ((Math.random() * 0xffffffff) >>> 0);
   state.net = null;
-  state.rng = makeLCG((Math.random() * 0xffffffff) >>> 0);
-  _resetGameState(pf, [1000, 2000, 2000]);
+  state.mapSeed = seed;
+  state.rng = makeLCG(seed);
+  _resetGameState(pf, [1500, 1500, 1500]);
 
-  genMap();
+  genMapFromSeed(seed);
   _populateOreHistory();
 
   const opponents = aiFactions ?? [0, 1, 2].filter(f => f !== pf);
@@ -60,8 +62,9 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions) 
   }
   state.rollback = { buffer: new Array(256).fill(null), inputHistory: {}, predictions: {}, humanSlots, _stallStart: null };
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
+  state.mapSeed = mapSeed;
   state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, mapH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [], stallCount: 0, nullsSent: 0, log: [], hasWarning: false };
-  _resetGameState(myFaction, [1000, 2000, 2000]);
+  _resetGameState(myFaction, [1500, 1500, 1500]);
 
   genMapFromSeed(mapSeed);
   _populateOreHistory();
@@ -153,10 +156,7 @@ export function startReplay(data) {
       state.rollback.inputHistory[tick][slot] = cmd;
     }
   }
-  state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };
-  state.replayMode = true;
-  state._replayEndTick = endTick;
-  _resetGameState(myFaction, [1000, 2000, 2000]);
+  _resetGameState(myFaction, [1500, 1500, 1500]);
   state.replayMode = true;
   state._replayEndTick = endTick;
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots };

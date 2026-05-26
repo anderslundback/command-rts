@@ -264,7 +264,14 @@ function onClick(ev) {
     }
   }
 
-  const clicked = getEntAt(tx, ty);
+  const _raw = getEntAt(tx, ty);
+  const clicked = (() => {
+    if (!_raw || _raw.faction === f) return _raw;
+    if (!state.fog?.visible) return _raw;
+    const etx = _raw.isBuilding ? (_raw.x + (_raw.w >> 1)) : _raw.x;
+    const ety = _raw.isBuilding ? (_raw.y + (_raw.h >> 1)) : _raw.y;
+    return state.fog.visible[ety * MW + etx] ? _raw : null;
+  })();
   const now = Date.now();
 
   if (clicked && clicked === state.lastClickEnt && now - state.lastClickTime < 400) {

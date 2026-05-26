@@ -1,7 +1,8 @@
-import { BDEF, UDEF } from './constants.js';
+import { BDEF, UDEF, FBONUSES } from './constants.js';
 import { state } from './state.js';
 import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderStop, orderHarvest } from './orders.js';
-import { placeBuilding, deployMcvInPlace } from './placement.js';
+import { placeBuilding, deployMcvInPlace, spawnNear } from './placement.js';
+import { calcPower } from './resources.js';
 import { playTrainingStart, playCancel, playBuildStart } from './audio.js';
 
 export function applyCommand(cmd) {
@@ -35,13 +36,18 @@ export function applyCommand(cmd) {
           const idx = q.findIndex(it => it.type === cmd.btype && it.ready);
           if (idx >= 0) { q.splice(idx, 1); break; }
         }
+        if (cmd.btype === 'refinery') {
+          const harv = spawnNear(placed.faction, 'harvester', placed);
+          if (harv) orderHarvest(harv, placed);
+        }
       }
       break;
     }
     case 'queue_build': {
       const q = cmd.queueType === 'def' ? state.hudDefQueue[cmd.faction] : state.hudBuildQueue[cmd.faction];
       if (q) {
-        q.push({ type: cmd.btype, t: 0, total: (BDEF[cmd.btype]?.btime ?? 20) * 60, paid: 0, ready: false });
+        const buildMult = FBONUSES[cmd.faction]?.buildMult ?? 1;
+        q.push({ type: cmd.btype, t: 0, total: Math.round((BDEF[cmd.btype]?.btime ?? 20) * 60 * buildMult), paid: 0, ready: false });
         if (!state.isRollingBack && cmd.faction === state.playerFaction) playBuildStart();
       }
       break;
@@ -57,8 +63,10 @@ export function applyCommand(cmd) {
     }
     case 'queue_train': {
       const b = state.entById.get(cmd.bldgId);
-      if (b && b.trainQ && b.trainQ.length < 5) {
-        b.trainQ.push({ type: cmd.utype, t: 0, total: (UDEF[cmd.utype]?.ttime ?? 20) * 60 });
+      if (b && b.trainQ && b.trainQ.length < 99) {
+        const ttime = UDEF[cmd.utype]?.ttime ?? 20;
+        const trainMult = FBONUSES[b.faction]?.trainMult ?? 1;
+        b.trainQ.push({ type: cmd.utype, t: 0, total: Math.round(ttime * trainMult * 60) });
         if (!state.isRollingBack && b.faction === state.playerFaction) playTrainingStart();
       }
       break;
@@ -74,7 +82,11 @@ export function applyCommand(cmd) {
     }
     case 'sell': {
       const b = state.entById.get(cmd.entId);
-      if (b && !b.dead) { state.credits[b.faction] += (BDEF[b.type]?.cost ?? 0) * 0.5; b.dead = true; }
+      if (b && !b.dead) {
+        state.credits[b.faction] += (BDEF[b.type]?.cost ?? 0) * 0.5;
+        b.dead = true;
+        calcPower();
+      }
       break;
     }
     case 'repair': {

@@ -15,9 +15,9 @@ export const FDATA = Object.freeze([
 ]);
 
 export const FBONUSES = Object.freeze([
-  { creditMult: 1.0, hpMult: 1.0,  speedMult: 1.0,  trainMult: 1.0  },
-  { creditMult: 0.8, hpMult: 1.3,  speedMult: 0.85, trainMult: 1.2  },
-  { creditMult: 1.3, hpMult: 0.85, speedMult: 1.2,  trainMult: 0.85 },
+  { creditMult: 1.0,  hpMult: 1.0,  speedMult: 1.0,  trainMult: 1.0,  buildMult: 0.85 }, // ALLIANCE: faster construction
+  { creditMult: 0.85, hpMult: 1.3,  speedMult: 0.85, trainMult: 1.1,  buildMult: 1.0  }, // BROTHERHOOD: tanky, slow eco
+  { creditMult: 1.2,  hpMult: 0.85, speedMult: 1.1,  trainMult: 0.9,  buildMult: 1.0  }, // SYNDICATE: fast eco, glass cannon
 ]);
 
 // ARMOR_MULT[weaponType][armorType] = damage multiplier
@@ -35,7 +35,7 @@ export const ARMOR_MULT = Object.freeze({
 export const BDEF = Object.freeze({
   command:  { name: 'Command Ctr',   w: 3, h: 3, cost: 0,    power: -2, hp: 1200, btime: 0,  prereq: null,        armor: 'building', weapon: null,   desc: 'Main base' },
   power:    { name: 'Power Plant',   w: 2, h: 2, cost: 300,  power:  5, hp: 350,  btime: 8,  prereq: 'command',   armor: 'building', weapon: null,   desc: '+5 power' },
-  refinery: { name: 'Refinery',      w: 3, h: 2, cost: 500,  power: -1, hp: 600,  btime: 12, prereq: 'command',   armor: 'building', weapon: null,   desc: 'Ore · spawns Harvester' },
+  refinery: { name: 'Refinery',      w: 3, h: 2, cost: 700,  power: -1, hp: 600,  btime: 12, prereq: 'command',   armor: 'building', weapon: null,   desc: 'Ore · spawns Harvester' },
   barracks: { name: 'Barracks',      w: 2, h: 2, cost: 400,  power: -1, hp: 500,  btime: 10, prereq: 'power',     armor: 'building', weapon: null,   desc: 'Trains infantry' },
   factory:  { name: 'War Factory',   w: 3, h: 2, cost: 700,  power: -2, hp: 700,  btime: 16, prereq: 'power',     armor: 'building', weapon: null,   desc: 'Trains vehicles' },
   depot:    { name: 'Service Depot', w: 3, h: 2, cost: 600,  power: -1, hp: 450,  btime: 14, prereq: 'factory',   armor: 'building', weapon: null,   desc: 'Repairs vehicles · unlocks MCV' },
@@ -54,10 +54,10 @@ export const UDEF = Object.freeze({
   tank:      { name: 'Tank',      cost: 650,  hp: 320, speed: 1.6, dmg: 35, range: 5, aspd: 85,  ttime: 15, desc: 'Heavy armor',               armor: 'heavy',    weapon: 'cannon' },
   mcv:       { name: 'MCV',       cost: 1200, hp: 300, speed: 1.1, dmg: 0,  range: 0, aspd: 0,   ttime: 25, desc: 'Deploys as Command Center', armor: 'heavy',    weapon: null,         prereq: 'depot' },
   artillery: { name: 'Artillery', cost: 900,  hp: 120, speed: 0.85, dmg: 55, range: 11, aspd: 120, ttime: 20, desc: 'Long-range siege',         armor: 'light',    weapon: 'cannon',     splash: 1.5, prereq: 'radar', factionOnly: 0 },
-  v2rocket:  { name: 'V2 Rocket', cost: 900,  hp: 120, speed: 0.80, dmg: 52, range: 11, aspd: 130, ttime: 22, desc: 'Rocket artillery',         armor: 'light',    weapon: 'rockets',    splash: 1.5, prereq: 'radar', factionOnly: 1 },
+  v2rocket:  { name: 'V2 Rocket', cost: 900,  hp: 120, speed: 0.80, dmg: 58, range: 11, aspd: 130, ttime: 22, desc: 'Rocket artillery',         armor: 'light',    weapon: 'rockets',    splash: 1.5, prereq: 'radar', factionOnly: 1 },
   tomahawk:  { name: 'Tomahawk',  cost: 850,  hp: 100, speed: 0.90, dmg: 48, range: 11, aspd: 110, ttime: 18, desc: 'Precision missiles',       armor: 'light',    weapon: 'rockets',    splash: 1.5, prereq: 'radar', factionOnly: 2 },
   fighter:   { name: 'Fighter',   cost: 800,  hp: 80,  speed: 3.2, dmg: 22, range: 5, aspd: 40,  ttime: 18, desc: 'Fast air superiority',      armor: 'air',      weapon: 'strafe',     prereq: 'airfield', factionOnly: 0 },
-  gunship:   { name: 'Gunship',   cost: 1100, hp: 220, speed: 1.6, dmg: 50, range: 5, aspd: 120, ttime: 26, desc: 'Heavy bomber',              armor: 'air',      weapon: 'bombs',      prereq: 'airfield', factionOnly: 1, splash: 1.2 },
+  gunship:   { name: 'Gunship',   cost: 950,  hp: 180, speed: 1.6, dmg: 42, range: 5, aspd: 120, ttime: 26, desc: 'Heavy bomber',              armor: 'air',      weapon: 'bombs',      prereq: 'airfield', factionOnly: 1 },
   drone:     { name: 'Drone',     cost: 600,  hp: 60,  speed: 3.8, dmg: 9,  range: 4, aspd: 35,  ttime: 14, desc: 'Fast attack drone',         armor: 'air',      weapon: 'strafe',     prereq: 'airfield', factionOnly: 2 },
 });
 
