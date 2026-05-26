@@ -33,7 +33,7 @@ export function BugReportModal(): React.ReactElement {
     if (e.key === 'Escape') closeBugReport();
   }, []);
 
-  const { screenshot } = getCaptured();
+  const { screenshot, autoTriggered } = getCaptured();
   const canSubmit = cooldown === 0 && description.trim().length > 0 && status === 'idle';
   const charsLeft = 1000 - description.length;
 
@@ -60,6 +60,13 @@ export function BugReportModal(): React.ReactElement {
           <span style={{ color: '#8ab', fontSize: 12, letterSpacing: 2 }}>BUG REPORT</span>
           <button onClick={closeBugReport} style={ghostBtn}>✕</button>
         </div>
+
+        {/* Auto-trigger notice */}
+        {autoTriggered && (
+          <div style={{ background: '#1a0f0a', border: '1px solid #5a2a1a', color: '#f84', fontSize: 10, padding: '4px 8px', letterSpacing: 1 }}>
+            AN ERROR WAS DETECTED — logs captured automatically. Describe what you were doing.
+          </div>
+        )}
 
         {/* Screenshot preview */}
         {screenshot && (

@@ -26,8 +26,25 @@ export function initRingBuffer() {
   const origWarn  = console.warn.bind(console);
   console.error = (...args) => { _push('error', args); origError(...args); };
   console.warn  = (...args) => { _push('warn',  args); origWarn(...args); };
-  window.addEventListener('error', e => _push('uncaught', [`${e.message} @ ${e.filename}:${e.lineno}`]));
-  window.addEventListener('unhandledrejection', e => _push('rejection', [String(e.reason)]));
+
+  window.addEventListener('error', e => {
+    _push('uncaught', [`${e.message} @ ${e.filename}:${e.lineno}`]);
+    if (state.gameStarted && !state.gameOver) _autoOpen();
+  });
+  window.addEventListener('unhandledrejection', e => {
+    _push('rejection', [String(e.reason)]);
+    if (state.gameStarted && !state.gameOver) _autoOpen();
+  });
+}
+
+// Debounced so a burst of errors only opens the modal once
+let _autoOpenTimer = null;
+function _autoOpen() {
+  if (_autoOpenTimer) return;
+  _autoOpenTimer = setTimeout(() => {
+    _autoOpenTimer = null;
+    if (!uiStore.getState().bugReportOpen) openBugReport(true);
+  }, 500);
 }
 
 function _getLogs() {
@@ -42,16 +59,18 @@ function _getLogs() {
 let _screenshot = null;
 let _gameState  = null;
 let _wasManuallyPaused = false;
+let _autoTriggered = false;
 
 export function getCaptured() {
-  return { screenshot: _screenshot, gameState: _gameState };
+  return { screenshot: _screenshot, gameState: _gameState, autoTriggered: _autoTriggered };
 }
 
 // ── Open / Close ───────────────────────────────────────────────────────────
 
-export function openBugReport() {
-  _screenshot = _captureScreenshot(state.canvas);
-  _gameState  = _captureGameState();
+export function openBugReport(auto = false) {
+  _screenshot    = _captureScreenshot(state.canvas);
+  _gameState     = _captureGameState();
+  _autoTriggered = auto;
 
   _wasManuallyPaused = state.paused;
   if (!state.net) state.paused = true;
@@ -61,8 +80,9 @@ export function openBugReport() {
 
 export function closeBugReport() {
   if (!state.net && !_wasManuallyPaused) state.paused = false;
-  _screenshot = null;
-  _gameState  = null;
+  _screenshot    = null;
+  _gameState     = null;
+  _autoTriggered = false;
   uiStore.setState({ bugReportOpen: false });
 }
 

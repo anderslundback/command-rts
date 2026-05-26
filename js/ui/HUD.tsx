@@ -163,7 +163,7 @@ export function HUD(): React.ReactElement {
 
       {/* Bug report */}
       <button
-        onClick={openBugReport}
+        onClick={() => openBugReport()}
         title="Report a bug"
         style={{
           background: 'none', border: '1px solid #1e1a20',
