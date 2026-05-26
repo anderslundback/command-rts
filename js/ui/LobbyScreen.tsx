@@ -5,6 +5,7 @@ import { FDATA } from '../constants.js';
 // @ts-ignore
 import { net } from '../net/netClient.js';
 
+const SPEED_LABELS = ['SLOWEST', 'SLOW', 'NORMAL', 'FAST', 'FASTEST'];
 const FACTION_NAMES = (FDATA as any[]).map((f: any) => f.name);
 
 function PlayerRow({
@@ -121,7 +122,7 @@ export function LobbyScreen(): React.ReactElement {
 
     const onLobbyUpdate = (msg: any) => {
       uiStore.setState((st: any) => ({
-        lobby: st.lobby ? { ...st.lobby, players: msg.players } : null,
+        lobby: st.lobby ? { ...st.lobby, players: msg.players, lobbyGameSpeed: msg.gameSpeed ?? st.lobby.lobbyGameSpeed ?? 4 } : null,
       }));
     };
     const onChatMsg = (msg: any) => {
@@ -162,7 +163,7 @@ export function LobbyScreen(): React.ReactElement {
 
   if (!lobby) return <></>;
 
-  const { roomCode, players, chatMessages, mySlot, isHost } = lobby;
+  const { roomCode, players, chatMessages, mySlot, isHost, lobbyGameSpeed = 4 } = lobby;
   const humanPlayers = players.filter(p => !p.isAI && !p.isEmpty);
   const allGuestsReady = humanPlayers.filter(p => !p.isHost).every(p => p.ready);
   const myPlayer = players[mySlot];
@@ -238,6 +239,30 @@ export function LobbyScreen(): React.ReactElement {
                 {netError}
               </div>
             )}
+
+            {/* Game speed */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '6px 8px', background: '#06080e', border: '1px solid #0e1e2e' }}>
+              <span style={{ color: '#446', fontSize: 9, letterSpacing: 2, flex: 1 }}>GAME SPEED</span>
+              {isHost ? (
+                <>
+                  <button
+                    onClick={() => net.send({ type: 'lobby_speed', speed: lobbyGameSpeed - 1 })}
+                    disabled={lobbyGameSpeed <= 0}
+                    style={{ background: 'none', border: 'none', color: lobbyGameSpeed <= 0 ? '#2a3040' : '#668', cursor: lobbyGameSpeed <= 0 ? 'default' : 'pointer', fontSize: 10, padding: '0 2px' }}
+                  >◄</button>
+                  <span style={{ color: '#fc4', fontSize: 11, letterSpacing: 1, minWidth: 52, textAlign: 'center' }}>
+                    {SPEED_LABELS[lobbyGameSpeed]}
+                  </span>
+                  <button
+                    onClick={() => net.send({ type: 'lobby_speed', speed: lobbyGameSpeed + 1 })}
+                    disabled={lobbyGameSpeed >= 4}
+                    style={{ background: 'none', border: 'none', color: lobbyGameSpeed >= 4 ? '#2a3040' : '#668', cursor: lobbyGameSpeed >= 4 ? 'default' : 'pointer', fontSize: 10, padding: '0 2px' }}
+                  >►</button>
+                </>
+              ) : (
+                <span style={{ color: '#fc4', fontSize: 11, letterSpacing: 1 }}>{SPEED_LABELS[lobbyGameSpeed]}</span>
+              )}
+            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {!isHost && (

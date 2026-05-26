@@ -233,6 +233,7 @@ export function Menu(): React.ReactElement {
           mySlot: msg.slot,
           isHost: true,
           myName: name,
+          lobbyGameSpeed: 4,
         },
       });
     };
@@ -266,6 +267,7 @@ export function Menu(): React.ReactElement {
           mySlot: msg.slot,
           isHost: false,
           myName: name,
+          lobbyGameSpeed: msg.gameSpeed ?? 4,
         },
       });
     };
