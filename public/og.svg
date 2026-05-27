@@ -1,0 +1,77 @@
+<svg viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#070a0f"/>
+
+  <!-- Subtle noise / vignette suggestion via radial gradient -->
+  <defs>
+    <radialGradient id="vg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%"   stop-color="#0d1018"/>
+      <stop offset="100%" stop-color="#030507"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#vg)" opacity="0.6"/>
+
+  <!-- ─── Tactical corner brackets ──────────────────────────────────────── -->
+  <!-- Each bracket: two 36px lines at right-angle, 32px from edge -->
+  <!-- Top-left -->
+  <line x1="32" y1="68" x2="32" y2="32" stroke="#c9aa50" stroke-width="2" stroke-opacity="0.45" stroke-linecap="square"/>
+  <line x1="32" y1="32" x2="68" y2="32" stroke="#c9aa50" stroke-width="2" stroke-opacity="0.45" stroke-linecap="square"/>
+  <!-- Top-right -->
+  <line x1="1168" y1="68" x2="1168" y2="32" stroke="#c9aa50" stroke-width="2" stroke-opacity="0.45" stroke-linecap="square"/>
+  <line x1="1168" y1="32" x2="1132" y2="32" stroke="#c9aa50" stroke-width="2" stroke-opacity="0.45" stroke-linecap="square"/>
+  <!-- Bottom-left -->
+  <line x1="32" y1="562" x2="32" y2="598" stroke="#c9aa50" stroke-width="2" stroke-opacity="0.45" stroke-linecap="square"/>
+  <line x1="32" y1="598" x2="68" y2="598" stroke="#c9aa50" stroke-width="2" stroke-opacity="0.45" stroke-linecap="square"/>
+  <!-- Bottom-right -->
+  <line x1="1168" y1="562" x2="1168" y2="598" stroke="#c9aa50" stroke-width="2" stroke-opacity="0.45" stroke-linecap="square"/>
+  <line x1="1168" y1="598" x2="1132" y2="598" stroke="#c9aa50" stroke-width="2" stroke-opacity="0.45" stroke-linecap="square"/>
+
+  <!-- ─── Tactical diamond mark — centre (600, 185) half-diag 80 ─────── -->
+  <!-- Corner dots -->
+  <circle cx="543" cy="128" r="4"  fill="rgba(201,170,80,0.40)"/>
+  <circle cx="657" cy="128" r="4"  fill="rgba(201,170,80,0.40)"/>
+  <circle cx="543" cy="242" r="4"  fill="rgba(201,170,80,0.40)"/>
+  <circle cx="657" cy="242" r="4"  fill="rgba(201,170,80,0.40)"/>
+
+  <!-- Outer diamond -->
+  <polygon points="600,105 680,185 600,265 520,185"
+           fill="rgba(201,170,80,0.09)" stroke="#c9aa50" stroke-width="3" stroke-linejoin="miter"/>
+
+  <!-- Inner diamond (half-diag 40) -->
+  <polygon points="600,145 640,185 600,225 560,185"
+           fill="none" stroke="#c9aa50" stroke-width="1.5" stroke-opacity="0.38"/>
+
+  <!-- Ticks: gap 6px, length 18px -->
+  <line x1="600" y1="99"  x2="600" y2="81"  stroke="#c9aa50" stroke-width="3" stroke-linecap="square"/>
+  <line x1="600" y1="271" x2="600" y2="289" stroke="#c9aa50" stroke-width="3" stroke-linecap="square"/>
+  <line x1="514" y1="185" x2="496" y2="185" stroke="#c9aa50" stroke-width="3" stroke-linecap="square"/>
+  <line x1="686" y1="185" x2="704" y2="185" stroke="#c9aa50" stroke-width="3" stroke-linecap="square"/>
+
+  <!-- Centre dot -->
+  <circle cx="600" cy="185" r="6" fill="#c9aa50"/>
+
+  <!-- ─── Rules above text ───────────────────────────────────────────── -->
+  <line x1="160" y1="318" x2="1040" y2="318" stroke="#c9aa50" stroke-width="2.5" opacity="0.72"/>
+  <line x1="200" y1="325" x2="1000" y2="325" stroke="#c9aa50" stroke-width="1"   opacity="0.35"/>
+
+  <!-- ─── Wordmark ───────────────────────────────────────────────────── -->
+  <!-- letter-spacing=20 on 7 chars: trailing compensation = -10px → x=590 -->
+  <text x="590" y="450"
+        font-family="'Bebas Neue', Impact, 'Arial Black', sans-serif"
+        font-size="148" letter-spacing="20"
+        text-anchor="middle"
+        fill="#c9aa50">COMMAND</text>
+
+  <!-- ─── Rules below text ───────────────────────────────────────────── -->
+  <line x1="200" y1="462" x2="1000" y2="462" stroke="#c9aa50" stroke-width="1"   opacity="0.35"/>
+  <line x1="160" y1="469" x2="1040" y2="469" stroke="#c9aa50" stroke-width="2.5" opacity="0.72"/>
+
+  <!-- ─── Subtitle ───────────────────────────────────────────────────── -->
+  <text x="600" y="510"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="20" letter-spacing="10"
+        text-anchor="middle"
+        fill="#c9aa50" opacity="0.55">
+    REAL-TIME STRATEGY
+  </text>
+</svg>

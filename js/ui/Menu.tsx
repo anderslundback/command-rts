@@ -1,5 +1,6 @@
 import React from 'react';
 import { useUIStore, uiStore } from '../store';
+import { Logo } from './Logo';
 // @ts-ignore
 import { FDATA } from '../constants.js';
 // @ts-ignore
@@ -308,12 +309,8 @@ export function Menu(): React.ReactElement {
     >
       {phase === 'menu' && (
         <>
-          <div
-            style={{ fontSize: 42, fontWeight: 'bold', letterSpacing: 10, color: '#4af', textShadow: '0 0 24px #4af8', marginBottom: 4 }}
-          >
-            COMMAND
-          </div>
-          <div style={{ color: '#334', fontSize: 10, letterSpacing: 3, marginBottom: 8 }}>
+          <Logo width={360} style={{ marginBottom: 2 }}/>
+          <div style={{ color: '#7a6428', fontSize: 9, letterSpacing: 3, marginBottom: 8, fontFamily: 'Arial, sans-serif' }}>
             v{__APP_VERSION__}
           </div>
 

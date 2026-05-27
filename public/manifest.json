@@ -1,0 +1,17 @@
+{
+  "name": "Command",
+  "short_name": "COMMAND",
+  "description": "Minimalist Real-Time Strategy",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080b10",
+  "theme_color": "#c9aa50",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
