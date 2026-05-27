@@ -133,7 +133,8 @@ export function updateUnit(u) {
             dealDmg(tgt, u.dmg, u);
           }
           const { cam, canvas } = state;
-          if (u.px >= cam.x - 200 && u.px <= cam.x + canvas.width + 200 &&
+          if (!state.isRollingBack &&
+              u.px >= cam.x - 200 && u.px <= cam.x + canvas.width + 200 &&
               u.py >= cam.y - 200 && u.py <= cam.y + canvas.height + 200) {
             playShot(u.type);
           }
@@ -188,7 +189,7 @@ export function updateUnit(u) {
       if (adjToBuilding(u.x, u.y, ref)) {
         state.credits[u.faction] += u.ore * FBONUSES[u.faction].creditMult;
         u.ore = 0;
-        if (u.faction === state.playerFaction) playCash();
+        if (u.faction === state.playerFaction && !state.isRollingBack) playCash();
         orderHarvest(u, ref);
       } else {
         if (!u.path.length || state.tick % 30 === 0) {
@@ -286,7 +287,8 @@ function updateAirUnit(u) {
             dealDmg(tgt, u.dmg, u);
           }
           const { cam, canvas } = state;
-          if (u.px >= cam.x - 300 && u.px <= cam.x + canvas.width + 300 &&
+          if (!state.isRollingBack &&
+              u.px >= cam.x - 300 && u.px <= cam.x + canvas.width + 300 &&
               u.py >= cam.y - 300 && u.py <= cam.y + canvas.height + 300) {
             playShot(u.type);
           }

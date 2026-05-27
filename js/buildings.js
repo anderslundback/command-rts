@@ -73,7 +73,7 @@ export function updateBuilding(b) {
             const ref = nearestRefinery(b.faction, u.x, u.y);
             if (ref) orderHarvest(u, ref);
           }
-          if (b.faction === state.playerFaction) speakUnit(item.type);
+          if (b.faction === state.playerFaction && !state.isRollingBack) speakUnit(item.type);
         }
       }
     }
@@ -158,6 +158,6 @@ function advanceQueue(q, f) {
   if (item.t >= item.total) {
     item.ready = true;
     setMsg(BDEF[item.type].name + ' ready — click PLACE', 300);
-    speakBuilding(item.type);
+    if (!state.isRollingBack) speakBuilding(item.type);
   }
 }
