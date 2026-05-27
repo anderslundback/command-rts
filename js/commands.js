@@ -47,7 +47,7 @@ export function applyCommand(cmd) {
       const q = cmd.queueType === 'def' ? state.hudDefQueue[cmd.faction] : state.hudBuildQueue[cmd.faction];
       if (q) {
         const buildMult = FBONUSES[cmd.faction]?.buildMult ?? 1;
-        q.push({ type: cmd.btype, t: 0, total: Math.round((BDEF[cmd.btype]?.btime ?? 20) * 60 * buildMult), paid: 0, ready: false });
+        q.push({ type: cmd.btype, t: 0, total: Math.round((BDEF[cmd.btype]?.btime ?? 20) * 60 * buildMult), paid: 0, ready: false, announced: false });
         if (!state.isRollingBack && cmd.faction === state.playerFaction) playBuildStart();
       }
       break;

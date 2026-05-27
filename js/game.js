@@ -110,6 +110,7 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions, 
 
 export function showMenu() {
   if (_netInputHandler) { net.off('input', _netInputHandler); _netInputHandler = null; }
+  state.isRollingBack = false;
   state.net = null;
   state.syncDebug = null;
   state.rollback = null;
@@ -235,6 +236,7 @@ function _resetGameState(playerFaction, startCredits) {
   state.statusMsg = '';
   state.statusTimer = 0;
   state.minimapDirty = true;
+  state.isRollingBack = false;
   state.oreHistory = new Set();
   state.fpsLastTime = 0;
   state.fpsSmooth = 60;

@@ -73,7 +73,7 @@ export function updateBuilding(b) {
             const ref = nearestRefinery(b.faction, u.x, u.y);
             if (ref) orderHarvest(u, ref);
           }
-          if (b.faction === state.playerFaction && !state.isRollingBack) speakUnit(item.type);
+          if (b.faction === state.playerFaction) speakUnit(item.type);
         }
       }
     }
@@ -140,7 +140,16 @@ export function updateSidebarQueues() {
 function advanceQueue(q, f) {
   if (!q.length) return;
   const item = q[0];
-  if (item.ready) return; // waiting for player to click PLACE
+  if (item.ready) {
+    // Deferred announce: sound was suppressed during a rollback replay.
+    // The item stays in the queue until the player clicks PLACE, giving
+    // us a second chance to fire the sound on the next non-rollback tick.
+    if (!item.announced && !state.isRollingBack) {
+      item.announced = true;
+      speakBuilding(item.type);
+    }
+    return;
+  }
 
   const pwr = Math.max(0.25, getPowerRatio(f));
 
@@ -158,6 +167,10 @@ function advanceQueue(q, f) {
   if (item.t >= item.total) {
     item.ready = true;
     setMsg(BDEF[item.type].name + ' ready — click PLACE', 300);
-    if (!state.isRollingBack) speakBuilding(item.type);
+    if (!state.isRollingBack) {
+      item.announced = true;
+      speakBuilding(item.type);
+    }
+    // else: announced stays false; deferred to the early-return path above
   }
 }
