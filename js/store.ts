@@ -94,6 +94,12 @@ export interface SyncDebugState {
   log: string[];
   hasWarning: boolean;
   cred: [number, number, number];
+  entN: [number, number, number];
+  entH: [number, number, number];
+  hpH: number;
+  posH: number;
+  oreH: number;
+  bprogH: number;
 }
 
 // ── Store shape ──────────────────────────────────────────────────────────────

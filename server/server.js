@@ -351,7 +351,7 @@ wss.on('connection', ws => {
             // Find which components diverged
             const debugEntries = entries.map(e => e.debug).filter(Boolean);
             const diverged = debugEntries.length >= 2
-              ? ['entityH', 'creditsH', 'rngH', 'shellH', 'mapH'].filter(
+              ? ['entityH', 'creditsH', 'rngH', 'shellH', 'mapH', 'entN0', 'entN1', 'entN2', 'hpH', 'posH', 'oreH', 'bprogH'].filter(
                   k => !debugEntries.every(d => d[k] === debugEntries[0][k])
                 )
               : [];

@@ -67,7 +67,7 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions, 
   state.rollback = { buffer: new Array(64).fill(null), inputHistory: {}, predictions: {}, replayLog: {}, humanSlots, _stallStart: null };
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots, pauseCredits: [3, 3, 3], pausedBySlot: -1 };
   state.mapSeed = mapSeed;
-  state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, mapH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [], stallCount: 0, nullsSent: 0, log: [], hasWarning: false, cred: [0, 0, 0] };
+  state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, mapH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [], stallCount: 0, nullsSent: 0, log: [], hasWarning: false, cred: [0, 0, 0], entN: [0, 0, 0], entH: [0, 0, 0], hpH: 0, posH: 0, oreH: 0, bprogH: 0 };
   _resetGameState(myFaction, [1500, 1500, 1500]);
   state.gameSpeed = gameSpeed;
 

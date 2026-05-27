@@ -215,10 +215,11 @@ export function HUD(): React.ReactElement {
 }
 
 function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElement {
-  const { entityH, creditsH, rngH, shellH, mapH, tick, resyncs, lastDesyncTick, diverged, stallCount, nullsSent, log, cred } = debug;
+  const { entityH, creditsH, rngH, shellH, mapH, tick, resyncs, lastDesyncTick, diverged, stallCount, nullsSent, log, cred, entN, entH, hpH, posH, oreH, bprogH } = debug;
   const hex = (n: number) => '0x' + (n >>> 0).toString(16).toUpperCase().padStart(8, '0');
   const diff = (k: string) => diverged.includes(k);
   const FACTION_LABELS = ['ALN', 'BRO', 'SYN'];
+  const hasSubDiff = diff('hpH') || diff('posH') || diff('oreH') || diff('bprogH');
   return (
     <div style={{
       position: 'fixed',
@@ -234,7 +235,7 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
       zIndex: 30,
       pointerEvents: 'none',
       userSelect: 'none',
-      minWidth: 220,
+      minWidth: 240,
     }}>
       <div style={{ color: '#557', marginBottom: 2, letterSpacing: 1 }}>SYNC DEBUG</div>
       <div>tick {tick}{'  '}resyncs: <span style={{ color: resyncs > 0 ? '#f44' : '#8ab' }}>{resyncs}</span></div>
@@ -249,12 +250,50 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
           </div>
         );
       })}
-      {cred && (
+      {/* Sub-field hashes — show what kind of entity state is diverging */}
+      {(diff('entityH') || hasSubDiff) && (
+        <div style={{ marginTop: 2 }}>
+          {([['hpH', 'hp   '], ['posH', 'pos  '], ['oreH', 'ore  '], ['bprogH', 'bprog']] as [keyof SyncDebugState, string][]).map(([k, lbl]) => {
+            const val = debug[k] as number;
+            const isDiff = diff(k as string);
+            return (
+              <div key={k} style={{ color: isDiff ? '#f84' : '#334' }}>
+                {'  '}{lbl}{'  '}{hex(val)}{isDiff ? '  ◄' : ''}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {/* Per-faction entity counts — diverged if entN0/entN1/entN2 in diverged[] */}
+      {entN && (
         <div style={{ color: '#445', marginTop: 2 }}>
+          {FACTION_LABELS.map((lbl, i) => {
+            const isDiff = diff(`entN${i}`);
+            return (
+              <span key={i} style={{ marginRight: 8, color: isDiff ? '#f44' : '#445' }}>
+                {lbl}:{entN[i]}{isDiff ? '!' : ''}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {/* Per-faction credits */}
+      {cred && (
+        <div style={{ color: '#445' }}>
           {cred.map((c, i) => (
             <span key={i} style={{ marginRight: 8 }}>
-              {FACTION_LABELS[i]}:{Math.floor(c)}
+              ${Math.floor(c)}
             </span>
+          ))}
+        </div>
+      )}
+      {/* Per-faction entity hashes (visible when entityH diverges) */}
+      {entH && diverged.includes('entityH') && (
+        <div style={{ marginTop: 2 }}>
+          {FACTION_LABELS.map((lbl, i) => (
+            <div key={i} style={{ color: '#f44' }}>
+              {lbl} ent {hex(entH[i])}
+            </div>
           ))}
         </div>
       )}

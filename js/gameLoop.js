@@ -224,6 +224,13 @@ function gameTick() {
     }
   }
 
+  // Normalize credits to nearest 0.0001 before snapshotting — prevents tiny JIT float
+  // differences in movement/installment arithmetic from crossing the repair threshold
+  // (credits >= 0.05 / >= 0.15) and causing HP divergence that cascades into desync.
+  if (state.rollback) {
+    for (let f = 0; f < 3; f++) state.credits[f] = Math.round(state.credits[f] * 10000) / 10000;
+  }
+
   if (state.rollback) storeTickSnapshot();
 
   if (state.rollback && !state.isRollingBack && state.tick % 20 === 0) {
@@ -233,9 +240,29 @@ function gameTick() {
     const shellH = state.shells.length;
     const mapH = mapHash();
     const fullHash = entityHash(state.entities, state);
-    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, mapH, tick: state.tick, cred: [state.credits[0], state.credits[1], state.credits[2]] });
+    // Per-faction entity counts (sent to server for granular desync detection)
+    const entN = [0, 0, 0];
+    // Per-faction entity hash (client debug panel only)
+    const entH = [0, 0, 0];
+    // Per-field sub-hashes — tell us WHICH field is diverging without needing the full log
+    let hpH = 0, posH = 0, oreH = 0, bprogH = 0;
+    for (const e of state.entities) {
+      if (e.dead) continue;
+      const f = e.faction;
+      entN[f]++;
+      entH[f] ^= (e.id * 73856093) ^ ((e.hp | 0) * 19349663) ^ (Math.round(e.px) * 83492791) ^ (Math.round(e.py) * 95452411);
+      if (e.ore) entH[f] ^= (e.ore * 4256233) >>> 0;
+      entH[f] = ((entH[f] ^ (entH[f] >>> 13)) * 1540483477) >>> 0;
+      // Sub-hashes (mixed separately so a single diverging field lights up exactly one)
+      hpH  ^= ((e.id * 73856093) ^ ((e.hp | 0) * 19349663)) >>> 0;
+      posH ^= ((e.id * 83492791) ^ (Math.round(e.px) * 95452411) ^ (Math.round(e.py) * 31337007)) >>> 0;
+      if (e.ore) oreH ^= ((e.id * 4256233) ^ (e.ore * 6542927)) >>> 0;
+      if (e.isBuilding) bprogH ^= ((e.id * 31337) ^ ((e.bprog * 10000 | 0) * 99991)) >>> 0;
+    }
+    hpH >>>= 0; posH >>>= 0; oreH >>>= 0; bprogH >>>= 0;
+    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, mapH, tick: state.tick, cred: [state.credits[0], state.credits[1], state.credits[2]], entN: [...entN], entH: [...entH], hpH, posH, oreH, bprogH });
     window.__syncDebug = state.syncDebug ? { ...state.syncDebug } : null;
-    net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH, mapH } });
+    net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH, mapH, entN0: entN[0], entN1: entN[1], entN2: entN[2], hpH, posH, oreH, bprogH } });
   }
 
   state._dirty = true;

@@ -55,7 +55,7 @@ export function applyCommand(cmd) {
     case 'cancel_build': {
       const q = cmd.queueType === 'def' ? state.hudDefQueue[cmd.faction] : state.hudBuildQueue[cmd.faction];
       if (q && cmd.index < q.length) {
-        state.credits[cmd.faction] += BDEF[q[cmd.index].type]?.cost ?? 0;
+        state.credits[cmd.faction] += q[cmd.index].paid ?? 0;
         q.splice(cmd.index, 1);
         if (!state.isRollingBack && cmd.faction === state.playerFaction) playCancel();
       }
