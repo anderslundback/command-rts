@@ -224,7 +224,7 @@ export function syncFromGameState(): void {
 
   // Serialize selected entities
   const sel: EntUI[] = (s.selected as number[])
-    .map((id: number) => (s.entities as any[]).find((e: any) => e.id === id))
+    .map((id: number) => (s.entById as Map<number, any>).get(id))
     .filter(Boolean)
     .map((e: any): EntUI => ({
       id: e.id,

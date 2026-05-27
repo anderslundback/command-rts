@@ -23,7 +23,7 @@ export function saveSnapshot() {
     gameOverDelay: state.gameOverDelay,
     gameStats: { unitsLost: state.gameStats.unitsLost, enemiesKilled: state.gameStats.enemiesKilled, startTick: state.gameStats.startTick, endTick: state.gameStats.endTick },
     oreHistory: new Set(state.oreHistory),
-    mapRows: state.map.map(row => row.slice()),
+    mapRows: state.mapDirty ? state.map.map(row => row.slice()) : null,
     statusMsg: state.statusMsg,
     statusTimer: state.statusTimer,
     gameSpeed: state.gameSpeed,
@@ -96,6 +96,23 @@ function restoreEnt(s) {
   return e;
 }
 
+// ── Command equality (avoids JSON.stringify in the remote-input hot path) ────
+function cmdsEqual(a, b) {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (typeof a !== 'object') return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    const va = a[k], vb = b[k];
+    if (Array.isArray(va)) {
+      if (!Array.isArray(vb) || va.length !== vb.length) return false;
+      for (let i = 0; i < va.length; i++) if (va[i] !== vb[i]) return false;
+    } else if (va !== vb) return false;
+  }
+  return true;
+}
+
 // ── Input scheduling ──────────────────────────────────────────────────────────
 
 export function scheduleInput(cmd) {
@@ -124,9 +141,7 @@ export function onRemoteInput(tick, slot, cmd, _applyCmd, simulateTickFn) {
   // Fast-path: both null means predicted correctly (common case — no input that tick).
   const predVal = predicted ?? null;
   const cmdVal = cmd ?? null;
-  const mispredicted = tick <= state.tick &&
-    predVal !== cmdVal &&
-    JSON.stringify(predVal) !== JSON.stringify(cmdVal);
+  const mispredicted = tick <= state.tick && !cmdsEqual(predVal, cmdVal);
 
   if (mispredicted) {
     rollbackAndReplay(tick, state.tick, simulateTickFn);
@@ -159,6 +174,7 @@ function rollbackAndReplay(fromTick, toTick, simulateTickFn) {
 export function storeTickSnapshot() {
   if (!state.rollback) return;
   state.rollback.buffer[state.tick % state.rollback.buffer.length] = saveSnapshot();
+  state.mapDirty = false; // clear after snapshot has captured any tile changes this tick
   // Prune old input history every 64 ticks; keep 128 ticks (2× ring-buffer depth)
   if (state.tick % 64 === 0) {
     const pruneBelow = state.tick - 128;

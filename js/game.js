@@ -235,6 +235,7 @@ function _resetGameState(playerFaction, startCredits) {
   state.statusMsg = '';
   state.statusTimer = 0;
   state.minimapDirty = true;
+  state.mapDirty = false;
   state.oreHistory = new Set();
   state.fpsLastTime = 0;
   state.fpsSmooth = 60;

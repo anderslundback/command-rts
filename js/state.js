@@ -39,6 +39,7 @@ export const state = {
 
   activeTab: 'build',
   minimapDirty: true,
+  mapDirty: false,    // set when any tile changes; gating snapshot copy in lockstep.js
 
   hudBuildQueue: [[], [], []],
   hudDefQueue:   [[], [], []],
