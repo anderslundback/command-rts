@@ -15,7 +15,9 @@ import { net } from './net/netClient.js';
 import { applyCommand } from './commands.js';
 import { storeTickSnapshot, entityHash, mapHash } from './lockstep.js';
 
-export const TICK_MS_TABLE = [125, 83, 50, 33, 25];
+// Indices 0-4 are the standard in-game speeds.
+// Indices 5-6 (2× and 4×) are replay-only — setGameSpeed enforces this.
+export const TICK_MS_TABLE = [125, 83, 50, 33, 25, 12, 6];
 let _accumulator = 0;
 let _lastLoopTime = 0;
 

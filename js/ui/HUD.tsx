@@ -8,7 +8,8 @@ const _gs: any = _gsRaw;
 // @ts-ignore
 import { openBugReport } from '../bugReport.js';
 
-const SPEED_LABELS = ['SLOWEST', 'SLOW', 'NORMAL', 'FAST', 'FASTEST'];
+// Indices 5-6 are replay-only (enforced in setGameSpeed)
+const SPEED_LABELS = ['SLOWEST', 'SLOW', 'NORMAL', 'FAST', 'FASTEST', '2×', '4×'];
 
 export function HUD(): React.ReactElement {
   const playerFaction = useUIStore(s => s.playerFaction);
@@ -133,12 +134,17 @@ export function HUD(): React.ReactElement {
 
       <div style={{ flex: 1 }} />
 
-      {/* Game speed control — skirmish always, multiplayer host only */}
-      {(netState.role === 'none' || lobby?.isHost) && (
-        <SpeedControl speed={gameSpeed} />
+      {/* Game speed control */}
+      {/* Replay: always interactive, with extra 2× / 4× steps */}
+      {replayMode && (
+        <SpeedControl speed={gameSpeed} maxSpeed={6} />
       )}
-      {/* Read-only speed label for multiplayer clients */}
-      {netState.role !== 'none' && !lobby?.isHost && (
+      {/* Skirmish / multiplayer host: interactive, capped at FASTEST */}
+      {!replayMode && (netState.role === 'none' || lobby?.isHost) && (
+        <SpeedControl speed={gameSpeed} maxSpeed={4} />
+      )}
+      {/* Multiplayer client: read-only label */}
+      {!replayMode && netState.role !== 'none' && !lobby?.isHost && (
         <span style={{ color: '#557', fontSize: 10, letterSpacing: 1, minWidth: 52, textAlign: 'center' }}>
           {SPEED_LABELS[gameSpeed]}
         </span>
@@ -258,13 +264,16 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
   );
 }
 
-function SpeedControl({ speed }: { speed: number }): React.ReactElement {
+function SpeedControl({ speed, maxSpeed }: { speed: number; maxSpeed: number }): React.ReactElement {
   const handleDec = () => {
     import('../game.js').then((m: any) => m.setGameSpeed(speed - 1)).catch(console.error);
   };
   const handleInc = () => {
     import('../game.js').then((m: any) => m.setGameSpeed(speed + 1)).catch(console.error);
   };
+
+  // 2× and 4× labels are wider — give them a bit more room
+  const labelWidth = speed >= 5 ? 28 : 52;
 
   return (
     <div
@@ -290,17 +299,17 @@ function SpeedControl({ speed }: { speed: number }): React.ReactElement {
       >
         ◄
       </button>
-      <span style={{ color: '#557', fontSize: 10, letterSpacing: 1, minWidth: 52, textAlign: 'center' }}>
+      <span style={{ color: speed >= 5 ? '#f90' : '#557', fontSize: 10, letterSpacing: 1, minWidth: labelWidth, textAlign: 'center' }}>
         {SPEED_LABELS[speed]}
       </span>
       <button
         onClick={handleInc}
-        disabled={speed >= 4}
+        disabled={speed >= maxSpeed}
         style={{
           background: 'none',
           border: 'none',
-          color: speed >= 4 ? '#2a3040' : '#668',
-          cursor: speed >= 4 ? 'default' : 'pointer',
+          color: speed >= maxSpeed ? '#2a3040' : '#668',
+          cursor: speed >= maxSpeed ? 'default' : 'pointer',
           fontSize: 10,
           padding: '0 2px',
           lineHeight: 1,

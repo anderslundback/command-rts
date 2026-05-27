@@ -142,7 +142,9 @@ export function requestNetResume() {
 
 export function setGameSpeed(index) {
   if (!state.gameStarted) return;
-  const clamped = Math.max(0, Math.min(4, index));
+  // Indices 5-6 (2× / 4×) are only available in replay mode
+  const maxSpeed = state.replayMode ? 6 : 4;
+  const clamped = Math.max(0, Math.min(maxSpeed, index));
   state.gameSpeed = clamped;
   resetAccumulator();
   syncFromGameState();
