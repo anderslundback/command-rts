@@ -48,12 +48,14 @@ jobs:
           #   feat:                                 → minor
           #   everything else                       → patch
           BUMP=patch
+          MAJOR_RE='(^[a-z]+(\([^)]*\))?!:)|(BREAKING[[:space:]-]CHANGE)'
+          MINOR_RE='^feat(\([^)]*\))?:'
           for msg in "${MSGS[@]}"; do
-            if [[ "$msg" =~ (^[a-z]+(\([^)]*\))?!:)|(BREAKING[[:space:]-]CHANGE) ]]; then
+            if [[ "$msg" =~ $MAJOR_RE ]]; then
               BUMP=major
               break
             fi
-            if [[ "$BUMP" != major && "$msg" =~ ^feat(\([^)]*\))?: ]]; then
+            if [[ "$BUMP" != major && "$msg" =~ $MINOR_RE ]]; then
               BUMP=minor
             fi
           done
