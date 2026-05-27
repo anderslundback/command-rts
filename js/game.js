@@ -291,6 +291,8 @@ registerGameCallbacks({
     const nextTick = state.tick + 1;
     state.rollback.inputHistory[nextTick] ??= {};
     state.rollback.inputHistory[nextTick][state.net.mySlot] = cmd;
+    state.rollback.replayLog[nextTick] ??= {};
+    state.rollback.replayLog[nextTick][state.net.mySlot] = cmd;
     net.send({ type: 'input', tick: nextTick, slot: state.net.mySlot, cmd });
   },
   onPlayerLeft: (msg) => {
