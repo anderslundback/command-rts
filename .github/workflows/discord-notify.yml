@@ -1,0 +1,129 @@
+name: Discord Update Notification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'   # Only run when package.json is touched (version bumps live here)
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Full history so we can diff versions and collect commits
+
+      - name: Check for version bump and post to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          node - <<'EOF'
+          import { execSync } from 'child_process';
+          import { readFileSync } from 'fs';
+
+          // ── helpers ──────────────────────────────────────────────────────────
+          function run(cmd) {
+            try { return execSync(cmd, { encoding: 'utf8' }).trim(); }
+            catch { return ''; }
+          }
+
+          // ── version detection ────────────────────────────────────────────────
+          const currentPkg  = JSON.parse(readFileSync('package.json', 'utf8'));
+          const currentVer  = currentPkg.version;
+
+          // Get the version from the previous commit
+          const prevPkgRaw  = run('git show HEAD~1:package.json');
+          const prevVer     = prevPkgRaw ? JSON.parse(prevPkgRaw).version : null;
+
+          if (currentVer === prevVer) {
+            console.log(`Version unchanged (${currentVer}) — skipping Discord notification.`);
+            process.exit(0);
+          }
+
+          console.log(`Version bumped: ${prevVer ?? 'n/a'} → ${currentVer}`);
+
+          // ── collect commits since last version bump ───────────────────────────
+          // Find the previous commit that changed package.json's version field
+          const log = run(
+            `git log --oneline --no-merges HEAD~1 -- package.json`
+          );
+          // Walk backwards through package.json history to find the prior version bump
+          const pkgHistory = run(
+            `git log --format="%H" -- package.json`
+          ).split('\n').filter(Boolean);
+
+          let sinceHash = null;
+          for (const hash of pkgHistory.slice(1)) {          // skip current HEAD
+            const raw = run(`git show ${hash}:package.json`);
+            if (!raw) continue;
+            const v = JSON.parse(raw).version;
+            if (v !== currentVer) { sinceHash = hash; break; }
+          }
+
+          const rangeCmd = sinceHash
+            ? `git log --oneline --no-merges ${sinceHash}..HEAD`
+            : `git log --oneline --no-merges -20`;           // fallback: last 20
+
+          const commits = run(rangeCmd)
+            .split('\n')
+            .filter(Boolean)
+            .slice(0, 20);                                    // cap at 20 entries
+
+          // ── format changelog ──────────────────────────────────────────────────
+          const typeEmoji = {
+            feat:     '✨',
+            fix:      '🐛',
+            perf:     '⚡',
+            refactor: '♻️',
+            docs:     '📝',
+            chore:    '🔧',
+            test:     '🧪',
+            style:    '💄',
+          };
+
+          function formatLine(oneline) {
+            // oneline = "<hash> <message>"
+            const msg = oneline.replace(/^[a-f0-9]+\s+/, '');
+            const match = msg.match(/^(\w+)(?:\(.*?\))?:\s*(.+)/);
+            if (match) {
+              const emoji = typeEmoji[match[1]] ?? '•';
+              return `${emoji} ${match[2]}`;
+            }
+            return `• ${msg}`;
+          }
+
+          const changeLines = commits.map(formatLine).join('\n');
+
+          // ── build Discord embed ───────────────────────────────────────────────
+          const payload = {
+            embeds: [{
+              title: `🎮 Command v${currentVer}`,
+              description: changeLines || '_No changes listed._',
+              color: 0x4aaeff,    // ALLIANCE blue — matches the game's primary colour
+              footer: { text: `Released on ${new Date().toUTCString()}` },
+            }],
+          };
+
+          // ── POST to Discord ───────────────────────────────────────────────────
+          const url = process.env.DISCORD_WEBHOOK_URL;
+          if (!url) {
+            console.error('DISCORD_WEBHOOK_URL secret is not set — skipping.');
+            process.exit(0);
+          }
+
+          const resp = await fetch(url, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload),
+          });
+
+          if (!resp.ok) {
+            const text = await resp.text();
+            console.error(`Discord webhook failed: ${resp.status} ${text}`);
+            process.exit(1);
+          }
+
+          console.log('Discord notification sent successfully.');
+          EOF
+        shell: bash
