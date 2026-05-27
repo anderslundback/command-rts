@@ -1,0 +1,148 @@
+name: Auto Version Bump
+
+on:
+  push:
+    branches: [main]
+
+# One bump at a time; cancel-in-progress means rapid pushes merge into a
+# single run that sees ALL commits since the last tag.
+concurrency:
+  group: auto-version
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # lets GITHUB_TOKEN push commits and tags
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so tag lookups and ranges work
+
+      # ── 1. Determine bump level ───────────────────────────────────────────────
+      - name: Compute version bump
+        id: release
+        run: |
+          # Loop guard: skip if this push IS the release commit we just made.
+          if [[ "$(git log -1 --format='%s')" == "chore(release):"* ]]; then
+            echo "SKIP=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping: HEAD is a release commit."
+            exit 0
+          fi
+          echo "SKIP=false" >> "$GITHUB_OUTPUT"
+
+          # Collect commit subjects since the last semver tag.
+          # Falls back to the last 30 commits when no tags exist yet.
+          LAST_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [[ -n "$LAST_TAG" ]]; then
+            mapfile -t MSGS < <(git log --format='%s' "${LAST_TAG}..HEAD")
+          else
+            mapfile -t MSGS < <(git log --format='%s' -30)
+          fi
+
+          # Determine the highest bump level required by the commit range.
+          # Rules (Conventional Commits):
+          #   type!: or "BREAKING CHANGE" anywhere → major
+          #   feat:                                 → minor
+          #   everything else                       → patch
+          BUMP=patch
+          for msg in "${MSGS[@]}"; do
+            if [[ "$msg" =~ (^[a-z]+(\([^)]*\))?!:)|(BREAKING[[:space:]-]CHANGE) ]]; then
+              BUMP=major
+              break
+            fi
+            if [[ "$BUMP" != major && "$msg" =~ ^feat(\([^)]*\))?: ]]; then
+              BUMP=minor
+            fi
+          done
+
+          echo "Bump: $BUMP  (since: ${LAST_TAG:-beginning})"
+
+          # Apply bump to package.json only (no git commit, no git tag yet).
+          npm version "$BUMP" --no-git-tag-version --no-workspaces-update
+          NEW=$(jq -r .version package.json)
+
+          echo "VERSION=$NEW"       >> "$GITHUB_OUTPUT"
+          echo "LAST_TAG=$LAST_TAG" >> "$GITHUB_OUTPUT"
+
+      # ── 2. Commit and tag ─────────────────────────────────────────────────────
+      - name: Commit and tag
+        if: steps.release.outputs.SKIP != 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): bump to v${{ steps.release.outputs.VERSION }}"
+          git tag "v${{ steps.release.outputs.VERSION }}"
+          # Push commit + tag in one atomic operation.
+          git push origin main "refs/tags/v${{ steps.release.outputs.VERSION }}"
+
+      # ── 3. Discord notification ───────────────────────────────────────────────
+      # Handled here rather than in discord-notify.yml because commits pushed
+      # via GITHUB_TOKEN do not trigger other workflow runs (GitHub loop-guard).
+      - name: Notify Discord
+        if: steps.release.outputs.SKIP != 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          NEW_VER:  ${{ steps.release.outputs.VERSION }}
+          LAST_TAG: ${{ steps.release.outputs.LAST_TAG }}
+        run: |
+          node - <<'EOF'
+          import { execSync } from 'child_process';
+
+          function run(cmd) {
+            try { return execSync(cmd, { encoding: 'utf8' }).trim(); }
+            catch { return ''; }
+          }
+
+          const newVer  = process.env.NEW_VER;
+          const lastTag = process.env.LAST_TAG;
+
+          // HEAD is now the release commit; HEAD~1 is the last real change.
+          const rangeEnd = 'HEAD~1';
+          const rangeCmd = lastTag
+            ? `git log --oneline --no-merges ${lastTag}..${rangeEnd}`
+            : `git log --oneline --no-merges -20 ${rangeEnd}`;
+
+          const commits = run(rangeCmd).split('\n').filter(Boolean).slice(0, 20);
+
+          const typeEmoji = {
+            feat: '✨', fix: '🐛', perf: '⚡', refactor: '♻️',
+            docs: '📝', chore: '🔧', test: '🧪', style: '💄',
+          };
+
+          function formatLine(oneline) {
+            const msg = oneline.replace(/^[a-f0-9]+\s+/, '');
+            const m   = msg.match(/^(\w+)(?:\([^)]*\))?!?:\s*(.+)/);
+            return m ? `${typeEmoji[m[1]] ?? '•'} ${m[2]}` : `• ${msg}`;
+          }
+
+          const description = commits.map(formatLine).join('\n') || '_No changes listed._';
+          const payload = {
+            embeds: [{
+              title:       `🎮 Command v${newVer}`,
+              description,
+              color:       0x4aaeff,
+              footer:      { text: `Released on ${new Date().toUTCString()}` },
+            }],
+          };
+
+          const url = process.env.DISCORD_WEBHOOK_URL;
+          if (!url) { console.log('DISCORD_WEBHOOK_URL not set — skipping.'); process.exit(0); }
+
+          const resp = await fetch(url, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload),
+          });
+
+          if (!resp.ok) {
+            const text = await resp.text();
+            console.error(`Discord webhook failed: ${resp.status} ${text}`);
+            process.exit(1);
+          }
+          console.log('Discord notification sent.');
+          EOF
+        shell: bash
