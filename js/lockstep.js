@@ -6,7 +6,13 @@ import { uiStore } from './store.js';
 
 // ── Snapshot (save/restore full game state for rollback) ──────────────────────
 
-export function saveSnapshot() {
+// forDump=true: produce a JSON-safe snapshot for state dumps sent over WebSocket.
+//   - mapRows uses Array.from (plain array survives JSON; TypedArray.slice does not)
+//   - oreHistory is always a plain array (Set collapses to {} under JSON.stringify)
+// forDump=false (default): produce an in-memory snapshot for the rollback ring buffer.
+//   - mapRows uses TypedArray.slice (faster; never serialised to JSON)
+//   - mapRows is ALWAYS included so rollback can restore any tick correctly
+export function saveSnapshot(forDump = false) {
   return {
     tick: state.tick,
     eid: getEid(),
@@ -22,8 +28,8 @@ export function saveSnapshot() {
     gameOver: state.gameOver,
     gameOverDelay: state.gameOverDelay,
     gameStats: { unitsLost: state.gameStats.unitsLost, enemiesKilled: state.gameStats.enemiesKilled, startTick: state.gameStats.startTick, endTick: state.gameStats.endTick },
-    oreHistory: new Set(state.oreHistory),
-    mapRows: state.mapDirty ? state.map.map(row => row.slice()) : null,
+    oreHistory: [...state.oreHistory],
+    mapRows: state.map.map(row => forDump ? Array.from(row) : row.slice()),
     statusMsg: state.statusMsg,
     statusTimer: state.statusTimer,
     gameSpeed: state.gameSpeed,
@@ -174,7 +180,6 @@ function rollbackAndReplay(fromTick, toTick, simulateTickFn) {
 export function storeTickSnapshot() {
   if (!state.rollback) return;
   state.rollback.buffer[state.tick % state.rollback.buffer.length] = saveSnapshot();
-  state.mapDirty = false; // clear after snapshot has captured any tile changes this tick
   // Prune old input history every 64 ticks; keep 128 ticks (2× ring-buffer depth)
   if (state.tick % 64 === 0) {
     const pruneBelow = state.tick - 128;
@@ -238,7 +243,7 @@ export function applyStateDump(snap) {
   state.isRollingBack = false;
   if (state.rollback) {
     state.rollback._stallStart = null;
-    state.rollback.buffer[snap.tick % state.rollback.buffer.length] = saveSnapshot();
+    state.rollback.buffer[snap.tick % state.rollback.buffer.length] = saveSnapshot(true);
     for (const t of Object.keys(state.rollback.inputHistory)) {
       if (+t <= snap.tick) delete state.rollback.inputHistory[t];
     }

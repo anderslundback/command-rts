@@ -82,9 +82,7 @@ export function tickOreRegen() {
   if (state.tick % 180 !== 0) return;
   for (const pos of state.oreHistory) {
     const tx = pos % MW, ty = (pos / MW) | 0;
-    if (getTile(tx, ty) === T.GRASS && state.rng() < 0.04) {
+    if (getTile(tx, ty) === T.GRASS && state.rng() < 0.04)
       state.map[ty][tx] = T.ORE;
-      state.mapDirty = true;
-    }
   }
 }

@@ -160,7 +160,6 @@ export function updateUnit(u) {
       if (u.x === ht.x && u.y === ht.y) {
         u.ore += 30;
         state.map[ht.y][ht.x] = T.GRASS;
-        state.mapDirty = true;
         if (u.ore >= u.maxOre) {
           startReturn(u);
         } else {

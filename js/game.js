@@ -235,7 +235,6 @@ function _resetGameState(playerFaction, startCredits) {
   state.statusMsg = '';
   state.statusTimer = 0;
   state.minimapDirty = true;
-  state.mapDirty = false;
   state.oreHistory = new Set();
   state.fpsLastTime = 0;
   state.fpsSmooth = 60;
@@ -305,7 +304,7 @@ registerGameCallbacks({
   },
   handleResyncRequest: (sourceSlot) => {
     if (state.net?.mySlot !== sourceSlot) return;
-    const snap = saveSnapshot();
+    const snap = saveSnapshot(true); // JSON-safe: Array.from(row) for mapRows, array for oreHistory
     net.send({ type: 'state_dump', tick: snap.tick, snap });
   },
   handleStateDump: (snap) => {
