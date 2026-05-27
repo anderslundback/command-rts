@@ -233,7 +233,7 @@ function gameTick() {
     const shellH = state.shells.length;
     const mapH = mapHash();
     const fullHash = entityHash(state.entities, state);
-    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, mapH, tick: state.tick });
+    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, mapH, tick: state.tick, cred: [state.credits[0], state.credits[1], state.credits[2]] });
     window.__syncDebug = state.syncDebug ? { ...state.syncDebug } : null;
     net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH, mapH } });
   }

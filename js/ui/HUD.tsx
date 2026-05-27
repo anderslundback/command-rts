@@ -30,15 +30,13 @@ export function HUD(): React.ReactElement {
   const [debugOpen, setDebugOpen] = useState(false);
 
   const toggleDebug = useCallback(() => {
-    setDebugOpen(prev => {
-      const opening = !prev;
-      if (opening && _gs.syncDebug) {
-        _gs.syncDebug.hasWarning = false;
-        syncFromGameState();
-      }
-      return opening;
-    });
-  }, []);
+    const opening = !debugOpen;
+    if (opening && _gs.syncDebug) {
+      // Clear the warning dot when the panel is opened; next loop() sync picks it up
+      _gs.syncDebug.hasWarning = false;
+    }
+    setDebugOpen(opening);
+  }, [debugOpen]);
 
   const fd = FDATA[playerFaction] as { name: string; color: string };
   const powerOk = powerGen >= powerUsed;
@@ -217,9 +215,10 @@ export function HUD(): React.ReactElement {
 }
 
 function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElement {
-  const { entityH, creditsH, rngH, shellH, mapH, tick, resyncs, lastDesyncTick, diverged, stallCount, nullsSent, log } = debug;
+  const { entityH, creditsH, rngH, shellH, mapH, tick, resyncs, lastDesyncTick, diverged, stallCount, nullsSent, log, cred } = debug;
   const hex = (n: number) => '0x' + (n >>> 0).toString(16).toUpperCase().padStart(8, '0');
   const diff = (k: string) => diverged.includes(k);
+  const FACTION_LABELS = ['ALN', 'BRO', 'SYN'];
   return (
     <div style={{
       position: 'fixed',
@@ -250,6 +249,15 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
           </div>
         );
       })}
+      {cred && (
+        <div style={{ color: '#445', marginTop: 2 }}>
+          {cred.map((c, i) => (
+            <span key={i} style={{ marginRight: 8 }}>
+              {FACTION_LABELS[i]}:{Math.floor(c)}
+            </span>
+          ))}
+        </div>
+      )}
       {log && log.length > 0 && (
         <>
           <div style={{ color: '#334', marginTop: 4, marginBottom: 1 }}>── events ──</div>

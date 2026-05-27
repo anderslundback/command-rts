@@ -93,6 +93,7 @@ export interface SyncDebugState {
   nullsSent: number;
   log: string[];
   hasWarning: boolean;
+  cred: [number, number, number];
 }
 
 // ── Store shape ──────────────────────────────────────────────────────────────
