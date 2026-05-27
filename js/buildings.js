@@ -33,10 +33,10 @@ export function updateBuilding(b) {
   if (b.repairing) {
     if (b.hp >= b.maxHp) {
       b.repairing = false;
-    } else if (state.tick % 2 === 0) {
-      if (state.credits[b.faction] >= 0.05) {
-        state.credits[b.faction] -= 0.05;
-        b.hp = Math.min(b.maxHp, b.hp + 1);
+    } else if (state.tick % 40 === 0) {
+      if (state.credits[b.faction] >= 1) {
+        state.credits[b.faction] -= 1;
+        b.hp = Math.min(b.maxHp, b.hp + 20);
       } else {
         b.repairing = false;
         if (b.faction === state.playerFaction) setMsg('Repair stopped: out of credits', 120);
@@ -46,35 +46,25 @@ export function updateBuilding(b) {
 
   if (b.trainQ.length) {
     const item = b.trainQ[0];
-    let advance = true;
 
     const speedMult = Math.max(1, state.entities.filter(
       e => !e.dead && e.isBuilding && e.faction === b.faction && e.type === b.type && e.done
     ).length);
     const pwr = Math.max(0.25, getPowerRatio(b.faction));
 
-    const installment = (UDEF[item.type].cost / item.total) * speedMult * pwr;
-    if (state.credits[b.faction] >= installment) {
-      state.credits[b.faction] -= installment;
-    } else {
-      advance = false;
-    }
-
-    if (advance) {
-      item.t = Math.min(item.total, item.t + speedMult * pwr);
-      if (item.t >= item.total) {
-        b.doorEvent = state.tick; // open door for unit exit animation
-        b.trainQ.shift();
-        const u = spawnNear(b.faction, item.type, b);
-        if (u) {
-          if (b.waypoint && u.type !== 'harvester') {
-            orderMove(u, b.waypoint.tx, b.waypoint.ty);
-          } else if (u.type === 'harvester') {
-            const ref = nearestRefinery(b.faction, u.x, u.y);
-            if (ref) orderHarvest(u, ref);
-          }
-          if (b.faction === state.playerFaction) speakUnit(item.type);
+    item.t = Math.min(item.total, item.t + speedMult * pwr);
+    if (item.t >= item.total) {
+      b.doorEvent = state.tick; // open door for unit exit animation
+      b.trainQ.shift();
+      const u = spawnNear(b.faction, item.type, b);
+      if (u) {
+        if (b.waypoint && u.type !== 'harvester') {
+          orderMove(u, b.waypoint.tx, b.waypoint.ty);
+        } else if (u.type === 'harvester') {
+          const ref = nearestRefinery(b.faction, u.x, u.y);
+          if (ref) orderHarvest(u, ref);
         }
+        if (b.faction === state.playerFaction) speakUnit(item.type);
       }
     }
   }
@@ -154,12 +144,7 @@ function advanceQueue(q, f) {
   const pwr = Math.max(0.25, getPowerRatio(f));
 
   if (item.total > 0) {
-    const installment = (BDEF[item.type].cost / item.total) * pwr;
-    if (state.credits[f] >= installment) {
-      state.credits[f] -= installment;
-      item.paid = (item.paid || 0) + installment;
-      item.t += pwr;
-    }
+    item.t = Math.min(item.total, item.t + pwr);
   } else {
     item.t = 1; item.total = 1;
   }

@@ -224,18 +224,11 @@ function gameTick() {
     }
   }
 
-  // Normalize credits to nearest 0.0001 before snapshotting — prevents tiny JIT float
-  // differences in movement/installment arithmetic from crossing the repair threshold
-  // (credits >= 0.05 / >= 0.15) and causing HP divergence that cascades into desync.
-  if (state.rollback) {
-    for (let f = 0; f < 3; f++) state.credits[f] = Math.round(state.credits[f] * 10000) / 10000;
-  }
-
   if (state.rollback) storeTickSnapshot();
 
   if (state.rollback && !state.isRollingBack && state.tick % 20 === 0) {
     const entityH = entityHash(state.entities);
-    const creditsH = (((state.credits[0] * 100 | 0) * 31337) ^ ((state.credits[1] * 100 | 0) * 62674) ^ ((state.credits[2] * 100 | 0) * 94011)) >>> 0;
+    const creditsH = (((state.credits[0] | 0) * 31337) ^ ((state.credits[1] | 0) * 62674) ^ ((state.credits[2] | 0) * 94011)) >>> 0;
     const rngH = state.rng.getState() >>> 0;
     const shellH = state.shells.length;
     const mapH = mapHash();

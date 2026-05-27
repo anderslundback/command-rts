@@ -67,7 +67,7 @@ function QueueRow({
     mutate(s => {
       const f = s.playerFaction;
       const q = isDefQueue ? s.hudDefQueue[f] : s.hudBuildQueue[f];
-      s.credits[f] += BDEF[item.type].cost;
+      s.credits[f] += item.paid ?? 0;
       q.splice(index, 1);
       if (index === 0) {
         s.buildMode = null;
@@ -360,14 +360,20 @@ function BuildTab(): React.ReactElement {
   const handleBuild = (type: string) => {
     if (state.net) { scheduleInput({ action: 'queue_build', faction: state.playerFaction, btype: type, queueType: 'build' }); return; }
     const f = state.playerFaction;
-    state.hudBuildQueue[f].push({ type, t: 0, total: BDEF[type].btime * 60, paid: 0, ready: false });
+    const cost = BDEF[type]?.cost ?? 0;
+    if (state.credits[f] < cost) return;
+    state.credits[f] -= cost;
+    state.hudBuildQueue[f].push({ type, t: 0, total: Math.round(BDEF[type].btime * 60 * (FBONUSES[f]?.buildMult ?? 1)), paid: cost, ready: false });
     mutate(() => {});
   };
 
   const handleDefBuild = (type: string) => {
     if (state.net) { scheduleInput({ action: 'queue_build', faction: state.playerFaction, btype: type, queueType: 'def' }); return; }
     const f = state.playerFaction;
-    state.hudDefQueue[f].push({ type, t: 0, total: BDEF[type].btime * 60, paid: 0, ready: false });
+    const cost = BDEF[type]?.cost ?? 0;
+    if (state.credits[f] < cost) return;
+    state.credits[f] -= cost;
+    state.hudDefQueue[f].push({ type, t: 0, total: Math.round(BDEF[type].btime * 60 * (FBONUSES[f]?.buildMult ?? 1)), paid: cost, ready: false });
     mutate(() => {});
   };
 
@@ -510,11 +516,14 @@ function TrainTab(): React.ReactElement {
       return;
     }
     const d = UDEF[utype];
+    const cost = d?.cost ?? 0;
     for (let i = 0; i < count && building.trainQ.length < 99; i++) {
+      if (state.credits[f] < cost) break;
+      state.credits[f] -= cost;
       building.trainQ.push({
         type: utype,
         t: 0,
-        total: ((d.ttime * fb.trainMult * 60) | 0),
+        total: Math.round(d.ttime * fb.trainMult * 60),
       });
     }
     mutate(() => {});

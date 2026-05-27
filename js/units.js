@@ -18,13 +18,13 @@ export function updateUnit(u) {
 
   // Depot repair: vehicle must be idle on the pad (consistent for all factions — deterministic in multiplayer)
   if (VEHICLE_TYPES.has(u.type) && u.hp < u.maxHp) {
-    if (state.tick % 3 === 0 && hasPwr(u.faction)) {
+    if (state.tick % 20 === 0 && hasPwr(u.faction)) {
       const depot = state.entities.find(e => !e.dead && e.isBuilding && e.faction === u.faction &&
         e.type === 'depot' && e.done &&
         u.state === 'idle' && u.x >= e.x && u.x < e.x + e.w && u.y >= e.y && u.y < e.y + e.h);
-      if (depot && state.credits[u.faction] >= 0.15) {
-        state.credits[u.faction] -= 0.15;
-        u.hp = Math.min(u.maxHp, u.hp + 2);
+      if (depot && state.credits[u.faction] >= 1) {
+        state.credits[u.faction] -= 1;
+        u.hp = Math.min(u.maxHp, u.hp + 10);
         u.hitFlash = 0;
       }
     }
@@ -186,7 +186,7 @@ export function updateUnit(u) {
         if (ref) u.refineryId = ref.id; else break;
       }
       if (adjToBuilding(u.x, u.y, ref)) {
-        state.credits[u.faction] += u.ore * FBONUSES[u.faction].creditMult;
+        state.credits[u.faction] += Math.round(u.ore * FBONUSES[u.faction].creditMult);
         u.ore = 0;
         if (u.faction === state.playerFaction && !state.isRollingBack) playCash();
         orderHarvest(u, ref);
