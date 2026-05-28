@@ -248,7 +248,7 @@ export function syncFromGameState(): void {
       weaponType: e.weaponType ?? null,
       bprog: e.bprog ?? 0,
       done: !!e.done,
-      trainQ: Array.isArray(e.trainQ) ? e.trainQ.map((it: any) => ({ ...it })) : [],
+      trainQ: [], // BuildPanel reads from trainQueues; duplicating here is wasted work
       waypoint: e.waypoint ? { ...e.waypoint } : null,
       repairing: !!e.repairing,
     }));
