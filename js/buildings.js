@@ -50,21 +50,42 @@ export function updateBuilding(b) {
     const speedMult = Math.max(1, state.entities.filter(
       e => !e.dead && e.isBuilding && e.faction === b.faction && e.type === b.type && e.done
     ).length);
-    const pwr = Math.max(0.25, getPowerRatio(b.faction));
+    const pwr = Math.round(Math.max(0.25, getPowerRatio(b.faction)) * 4) / 4;
+    const k = Math.round(pwr * 4); // 1, 2, 3, or 4 — always integer
+    const cost = UDEF[item.type]?.cost ?? 0;
+    const threshold = 4 * item.total;
 
-    item.t = Math.min(item.total, item.t + speedMult * pwr);
-    if (item.t >= item.total) {
-      b.doorEvent = state.tick; // open door for unit exit animation
-      b.trainQ.shift();
-      const u = spawnNear(b.faction, item.type, b);
-      if (u) {
-        if (b.waypoint && u.type !== 'harvester') {
-          orderMove(u, b.waypoint.tx, b.waypoint.ty);
-        } else if (u.type === 'harvester') {
-          const ref = nearestRefinery(b.faction, u.x, u.y);
-          if (ref) orderHarvest(u, ref);
+    // Bresenham integer-credit installment: advance accumulator by cost*k*speedMult
+    // per tick; deduct 1 credit per threshold units of accumulation.
+    item.creditAcc = (item.creditAcc ?? 0) + cost * k * speedMult;
+    let canAdvance = true;
+    while (item.creditAcc >= threshold) {
+      if (state.credits[b.faction] >= 1) {
+        state.credits[b.faction] -= 1;
+        item.paid = (item.paid ?? 0) + 1;
+        item.creditAcc -= threshold;
+      } else {
+        canAdvance = false;
+        item.creditAcc -= cost * k * speedMult; // undo — retry next tick
+        break;
+      }
+    }
+
+    if (canAdvance) {
+      item.t = Math.min(item.total, item.t + speedMult * pwr);
+      if (item.t >= item.total) {
+        b.doorEvent = state.tick; // open door for unit exit animation
+        b.trainQ.shift();
+        const u = spawnNear(b.faction, item.type, b);
+        if (u) {
+          if (b.waypoint && u.type !== 'harvester') {
+            orderMove(u, b.waypoint.tx, b.waypoint.ty);
+          } else if (u.type === 'harvester') {
+            const ref = nearestRefinery(b.faction, u.x, u.y);
+            if (ref) orderHarvest(u, ref);
+          }
+          if (b.faction === state.playerFaction) speakUnit(item.type);
         }
-        if (b.faction === state.playerFaction) speakUnit(item.type);
       }
     }
   }
@@ -141,10 +162,26 @@ function advanceQueue(q, f) {
     return;
   }
 
-  const pwr = Math.max(0.25, getPowerRatio(f));
+  const pwr = Math.round(Math.max(0.25, getPowerRatio(f)) * 4) / 4;
+  const k = Math.round(pwr * 4); // 1, 2, 3, or 4 — always integer
+  const cost = BDEF[item.type]?.cost ?? 0;
 
   if (item.total > 0) {
-    item.t = Math.min(item.total, item.t + pwr);
+    const threshold = 4 * item.total;
+    item.creditAcc = (item.creditAcc ?? 0) + cost * k;
+    let canAdvance = true;
+    while (item.creditAcc >= threshold) {
+      if (state.credits[f] >= 1) {
+        state.credits[f] -= 1;
+        item.paid = (item.paid ?? 0) + 1;
+        item.creditAcc -= threshold;
+      } else {
+        canAdvance = false;
+        item.creditAcc -= cost * k; // undo — retry next tick
+        break;
+      }
+    }
+    if (canAdvance) item.t = Math.min(item.total, item.t + pwr);
   } else {
     item.t = 1; item.total = 1;
   }

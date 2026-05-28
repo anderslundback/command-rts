@@ -154,9 +154,8 @@ export function makeAI(f) {
 
     _queue(building, type) {
       const d = UDEF[type], b = FBONUSES[this.f];
-      if (state.credits[this.f] < d.cost) return;
-      state.credits[this.f] -= d.cost;
-      building.trainQ.push({ type, t: 0, total: (d.ttime * b.trainMult * 60) | 0 });
+      if (state.credits[this.f] < 1) return;
+      building.trainQ.push({ type, t: 0, total: (d.ttime * b.trainMult * 60) | 0, paid: 0, creditAcc: 0 });
     },
   };
 }

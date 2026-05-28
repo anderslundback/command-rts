@@ -46,11 +46,8 @@ export function applyCommand(cmd) {
     case 'queue_build': {
       const q = cmd.queueType === 'def' ? state.hudDefQueue[cmd.faction] : state.hudBuildQueue[cmd.faction];
       if (q) {
-        const cost = BDEF[cmd.btype]?.cost ?? 0;
-        if (state.credits[cmd.faction] < cost) break;
-        state.credits[cmd.faction] -= cost;
         const buildMult = FBONUSES[cmd.faction]?.buildMult ?? 1;
-        q.push({ type: cmd.btype, t: 0, total: Math.round((BDEF[cmd.btype]?.btime ?? 20) * 60 * buildMult), paid: cost, ready: false, announced: false });
+        q.push({ type: cmd.btype, t: 0, total: Math.round((BDEF[cmd.btype]?.btime ?? 20) * 60 * buildMult), paid: 0, creditAcc: 0, ready: false, announced: false });
         if (!state.isRollingBack && cmd.faction === state.playerFaction) playBuildStart();
       }
       break;
@@ -67,12 +64,9 @@ export function applyCommand(cmd) {
     case 'queue_train': {
       const b = state.entById.get(cmd.bldgId);
       if (b && b.trainQ && b.trainQ.length < 99) {
-        const cost = UDEF[cmd.utype]?.cost ?? 0;
-        if (state.credits[b.faction] < cost) break;
-        state.credits[b.faction] -= cost;
         const ttime = UDEF[cmd.utype]?.ttime ?? 20;
         const trainMult = FBONUSES[b.faction]?.trainMult ?? 1;
-        b.trainQ.push({ type: cmd.utype, t: 0, total: Math.round(ttime * trainMult * 60) });
+        b.trainQ.push({ type: cmd.utype, t: 0, total: Math.round(ttime * trainMult * 60), paid: 0, creditAcc: 0 });
         if (!state.isRollingBack && b.faction === state.playerFaction) playTrainingStart();
       }
       break;
@@ -80,7 +74,7 @@ export function applyCommand(cmd) {
     case 'cancel_train': {
       const b = state.entById.get(cmd.bldgId);
       if (b && b.trainQ && cmd.index < b.trainQ.length) {
-        state.credits[b.faction] += UDEF[b.trainQ[cmd.index].type]?.cost ?? 0;
+        state.credits[b.faction] += b.trainQ[cmd.index].paid ?? 0;
         b.trainQ.splice(cmd.index, 1);
         if (!state.isRollingBack && b.faction === state.playerFaction) playCancel();
       }

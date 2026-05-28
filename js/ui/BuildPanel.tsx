@@ -230,7 +230,7 @@ function TrainRow({
     mutate(s => {
       const bldg = s.entities.find((e: any) => e.id === bldgId);
       if (bldg && bldg.trainQ) {
-        s.credits[s.playerFaction] += UDEF[item.type]?.cost ?? 0;
+        s.credits[s.playerFaction] += (item as any).paid ?? 0;
         bldg.trainQ.splice(itemIndex, 1);
       }
     });
@@ -360,20 +360,14 @@ function BuildTab(): React.ReactElement {
   const handleBuild = (type: string) => {
     if (state.net) { scheduleInput({ action: 'queue_build', faction: state.playerFaction, btype: type, queueType: 'build' }); return; }
     const f = state.playerFaction;
-    const cost = BDEF[type]?.cost ?? 0;
-    if (state.credits[f] < cost) return;
-    state.credits[f] -= cost;
-    state.hudBuildQueue[f].push({ type, t: 0, total: Math.round(BDEF[type].btime * 60 * (FBONUSES[f]?.buildMult ?? 1)), paid: cost, ready: false });
+    state.hudBuildQueue[f].push({ type, t: 0, total: Math.round(BDEF[type].btime * 60 * (FBONUSES[f]?.buildMult ?? 1)), paid: 0, creditAcc: 0, ready: false });
     mutate(() => {});
   };
 
   const handleDefBuild = (type: string) => {
     if (state.net) { scheduleInput({ action: 'queue_build', faction: state.playerFaction, btype: type, queueType: 'def' }); return; }
     const f = state.playerFaction;
-    const cost = BDEF[type]?.cost ?? 0;
-    if (state.credits[f] < cost) return;
-    state.credits[f] -= cost;
-    state.hudDefQueue[f].push({ type, t: 0, total: Math.round(BDEF[type].btime * 60 * (FBONUSES[f]?.buildMult ?? 1)), paid: cost, ready: false });
+    state.hudDefQueue[f].push({ type, t: 0, total: Math.round(BDEF[type].btime * 60 * (FBONUSES[f]?.buildMult ?? 1)), paid: 0, creditAcc: 0, ready: false });
     mutate(() => {});
   };
 
@@ -516,14 +510,13 @@ function TrainTab(): React.ReactElement {
       return;
     }
     const d = UDEF[utype];
-    const cost = d?.cost ?? 0;
     for (let i = 0; i < count && building.trainQ.length < 99; i++) {
-      if (state.credits[f] < cost) break;
-      state.credits[f] -= cost;
       building.trainQ.push({
         type: utype,
         t: 0,
         total: Math.round(d.ttime * fb.trainMult * 60),
+        paid: 0,
+        creditAcc: 0,
       });
     }
     mutate(() => {});
