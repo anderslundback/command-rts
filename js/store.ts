@@ -295,7 +295,9 @@ export function syncFromGameState(): void {
     primaryBuilding: { ...s.primaryBuilding },
     replayMode: s.replayMode ?? false,
     mapSeed: s.mapSeed ?? null,
-    netStall: !!(s.rollback?._stallStart != null),
+    // Debounce: only show WAITING banner after stall persists ≥150 ms to suppress flicker
+    // from transient single late packets.
+    netStall: !!(s.rollback?._stallStart != null && (performance.now() - (s.rollback._stallStart as number)) >= 150),
     syncDebug: s.syncDebug ? { ...s.syncDebug } : null,
     menuOpen: s.menuOpen ?? false,
     netPauseCredits: s.net?.pauseCredits ? ([...s.net.pauseCredits] as [number, number, number]) : [3, 3, 3],
