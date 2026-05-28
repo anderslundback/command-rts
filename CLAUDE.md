@@ -67,7 +67,7 @@ loop() [requestAnimationFrame / setTimeout when tab hidden]
 | `js/constants.js` | `BDEF`, `UDEF`, `FDATA`, `FBONUSES`, `ARMOR_MULT`, `BUILD_TYPES`, `DEFENSE_TYPES`, `TRAIN_FROM` |
 | `js/entities.js` | `Ent`, `Building`, `Unit` classes; `addEnt`, `getEnt`, `removeDeadEnts` |
 | `js/renderer.js` | Canvas 2D rendering; range rings for selected armed entities; floating damage numbers; under-attack border; `renderMinimap()` |
-| `js/input.js` | Mouse/keyboard handlers; Escape = layered cancel → pause; A = attack-move mode; P = patrol mode; 1–9 control groups |
+| `js/input.js` | Mouse/keyboard handlers; Escape = layered cancel → pause; A = attack-move mode; P = patrol mode; 1–9 control groups; `onRadarRightClick` for minimap move orders |
 | `js/orders.js` | `orderMove`, `orderAttack`, `orderAttackMove`, `orderPatrol`, `orderStop`, `orderHarvest` |
 | `js/hud.js` | Thin wrappers: `setMsg`, `updateHUD`, `updateBuildPanel`, `switchTab` — all call `syncFromGameState()` |
 | `js/store.ts` | `uiStore` (Zustand vanilla), `syncFromGameState()`, `useUIStore` hook |
@@ -89,7 +89,7 @@ loop() [requestAnimationFrame / setTimeout when tab hidden]
 | `js/shells.js` | Projectile simulation and collision |
 | `js/fog.js` | Fog-of-war bitmap |
 | `server/server.js` | Node.js WebSocket relay; room/lobby management; desync detection; no game logic |
-| `test/verify.js` | Node.js tests for `makeLCG` and `entityHash` |
+| `test/verify.js` | Node.js tests for `makeLCG`, `entityHash`, Bresenham installments, power quantisation, credit determinism |
 
 ## Key conventions
 
@@ -101,7 +101,7 @@ loop() [requestAnimationFrame / setTimeout when tab hidden]
 
 **Entity lifecycle:** `addEnt(new Building/Unit(...))` → set `e.dead = true` to kill → `removeDeadEnts()` purges each frame.
 
-**Build queues:** `state.hudBuildQueue[faction]` for structures, `state.hudDefQueue[faction]` for defenses, `building.trainQ` for units. Items: `{ type, t, total, paid, ready }`.
+**Build queues:** `state.hudBuildQueue[faction]` for structures, `state.hudDefQueue[faction]` for defenses, `building.trainQ` for units. Items: `{ type, t, total, paid, creditAcc, ready }`. `paid` tracks integer credits deducted so far (refunded on cancel). `creditAcc` is the Bresenham accumulator for integer installments (see below).
 
 **Order system:** All order functions in `orders.js` accept a `queued` boolean. When `queued=true` the order is pushed onto `u.orderQueue`; `dequeueNext(u)` in `units.js` pops and executes the next order when the current one completes. The `'patrol'` state bounces between `u.patrolA`/`u.patrolB`, auto-attacking enemies in range, and resuming patrol after each kill.
 
@@ -124,6 +124,10 @@ loop() [requestAnimationFrame / setTimeout when tab hidden]
 **Multiplayer command flow:** `scheduleInput(cmd)` in `netClient.js` records the command in `rollback.inputHistory[tick+1][mySlot]` and sends it to the server. The command is applied during the next `gameTick` via the `inputHistory` loop — NOT immediately. Remote inputs arrive via the `'input'` WebSocket message, are stored in `inputHistory`, and trigger `onRemoteInput` which calls `rollbackAndReplay` if the tick was already simulated with a wrong prediction.
 
 **Rollback snapshot timing:** `storeTickSnapshot()` is called at the **end** of `gameTick`, after all entity updates (unit movement, building queues, credit deductions, `removeDeadEnts`). This is critical — storing it before entity updates means each rollback silently skips one tick's worth of simulation, causing credits and entity state to drift. The snapshot at tick T represents the complete, final state at the end of tick T.
+
+**Credit system — integer Bresenham installments:** All credit values are integers. Building/unit costs are deducted in 1-credit increments using a Bresenham/DDA accumulator: `creditAcc += cost * k` each tick (where `k = pwr * 4`, integer 1–4); 1 credit is deducted each time `creditAcc` crosses `4 * total`. Power ratio `pwr` is snapped to the nearest ¼ (`Math.round(pwr * 4) / 4`) so it is always exactly representable in IEEE 754 — ensuring `item.t` accumulation and credit deductions are bit-identical across all clients. Construction stalls only when `credits < 1` and a deduction is due (allowing partial-payment starts). `item.paid` tracks deductions made; `cancel_build`/`cancel_train` refund `item.paid`. Harvester deposits use `Math.round(ore * creditMult)`; sell refunds use `Math.floor(cost / 2)`.
+
+**Minimap right-click:** `onRadarRightClick` in `input.js` converts the radar canvas position to tile coords and issues a `move` command for all selected units (same formation-spread logic as main-canvas right-click). Shift+right-click queues. `contextmenu` is suppressed on the radar canvas to prevent the browser save-image menu.
 
 **Circular import prevention:** `combat.js`, `orders.js`, `pathfinding.js`, `resources.js` don't import from `units.js`/`buildings.js`. `netClient.js` ↔ `game.js` avoid circular dependency via `registerGameCallbacks()`.
 
