@@ -9,9 +9,11 @@ import { uiStore } from './store.js';
 // forDump=true: produce a JSON-safe snapshot for state dumps sent over WebSocket.
 //   - mapRows uses Array.from (plain array survives JSON; TypedArray.slice does not)
 //   - oreHistory is always a plain array (Set collapses to {} under JSON.stringify)
+//   - fog is omitted (client-local, would inflate the dump payload)
 // forDump=false (default): produce an in-memory snapshot for the rollback ring buffer.
 //   - mapRows uses TypedArray.slice (faster; never serialised to JSON)
 //   - mapRows is ALWAYS included so rollback can restore any tick correctly
+//   - fog.explored/visible are snapshotted so rollback doesn't reveal stale fog state
 export function saveSnapshot(forDump = false) {
   return {
     tick: state.tick,
@@ -34,6 +36,8 @@ export function saveSnapshot(forDump = false) {
     statusTimer: state.statusTimer,
     gameSpeed: state.gameSpeed,
     aiTimers: state.AI.map(ai => ai ? { btimer: ai.btimer, wtimer: ai.wtimer, htimer: ai.htimer } : null),
+    fogExplored: (!forDump && state.fog) ? state.fog.explored.slice() : null,
+    fogVisible:  (!forDump && state.fog) ? state.fog.visible.slice()  : null,
   };
 }
 
@@ -73,6 +77,10 @@ export function restoreSnapshot(snap) {
   state.oreHistory = new Set(snap.oreHistory);
   if (snap.mapRows) {
     for (let y = 0; y < snap.mapRows.length; y++) state.map[y].set(snap.mapRows[y]);
+  }
+  if (snap.fogExplored && state.fog) {
+    state.fog.explored.set(snap.fogExplored);
+    state.fog.visible.set(snap.fogVisible);
   }
   state.statusMsg = snap.statusMsg;
   state.statusTimer = snap.statusTimer;
