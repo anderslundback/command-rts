@@ -26,7 +26,7 @@ export function initInput() {
 
 }
 
-export { onRadarClick };
+export { onRadarClick, onRadarRightClick };
 
 function screenToWorld(sx, sy) {
   return { wx: sx + state.cam.x, wy: sy + state.cam.y };
@@ -613,4 +613,28 @@ function onRadarClick(ev) {
   state.cam.x = wx - state.canvas.width / 2;
   state.cam.y = wy - state.canvas.height / 2;
   clampCam();
+}
+
+function onRadarRightClick(ev) {
+  ev.preventDefault();
+  if (!state.gameStarted || state.paused) return;
+  const r = state.radar.getBoundingClientRect();
+  const tx = ((ev.clientX - r.left) / state.radar.width) * MW | 0;
+  const ty = ((ev.clientY - r.top) / state.radar.height) * MH | 0;
+  const f = state.playerFaction;
+  const myUnits = state.selected
+    .map(id => state.entById.get(id))
+    .filter(e => e && !e.dead && !e.isBuilding && e.faction === f);
+  if (!myUnits.length) return;
+  if (state.net) {
+    scheduleInput({ action: 'move', ids: myUnits.map(u => u.id), tx, ty, queued: ev.shiftKey });
+  } else {
+    const cols = Math.ceil(Math.sqrt(myUnits.length));
+    myUnits.forEach((u, i) => {
+      const offX = (i % cols) - Math.floor(cols / 2);
+      const offY = Math.floor(i / cols) - Math.floor(cols / 2);
+      orderMove(u, tx + offX, ty + offY, ev.shiftKey);
+    });
+  }
+  state.moveIndicators.push({ wx: tx * TS + TS / 2, wy: ty * TS + TS / 2, t: 30 });
 }

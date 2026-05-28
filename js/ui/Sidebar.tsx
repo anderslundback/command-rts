@@ -5,7 +5,7 @@ import { BuildPanel } from './BuildPanel';
 // @ts-ignore
 import * as _S from '../state.js';
 // @ts-ignore
-import { onRadarClick, clampCam } from '../input.js';
+import { onRadarClick, onRadarRightClick, clampCam } from '../input.js';
 const state: any = (_S as any).state;
 
 export function Sidebar(): React.ReactElement {
@@ -20,6 +20,7 @@ export function Sidebar(): React.ReactElement {
     (state as any).radar = radarRef.current;
     (state as any).radarCtx = radarRef.current.getContext('2d');
     radarRef.current.addEventListener('click', onRadarClick);
+    radarRef.current.addEventListener('contextmenu', onRadarRightClick);
 
     let dragging = false;
     const onDown = () => { dragging = true; };
@@ -40,6 +41,7 @@ export function Sidebar(): React.ReactElement {
     const radar = radarRef.current;
     return () => {
       radar.removeEventListener('click', onRadarClick);
+      radar.removeEventListener('contextmenu', onRadarRightClick);
       radar.removeEventListener('mousedown', onDown);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
