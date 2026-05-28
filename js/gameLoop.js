@@ -169,7 +169,8 @@ function gameTick() {
   if (state.rollback) {
     const inputs = state.rollback.inputHistory[state.tick];
     if (inputs) {
-      for (const cmd of Object.values(inputs)) {
+      for (const k in inputs) {
+        const cmd = inputs[k];
         if (cmd) applyCommand(cmd);
       }
     }
