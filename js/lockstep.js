@@ -44,17 +44,19 @@ export function saveSnapshot(forDump = false) {
 }
 
 function snapshotEnt(e) {
-  return Object.assign({}, e, {
-    _isBuilding: e.isBuilding,
-    path: e.path ? [...e.path] : null,
-    trainQ: e.trainQ ? e.trainQ.map(q => ({ ...q })) : null,
-    harvestTile: e.harvestTile ? { ...e.harvestTile } : null,
-    waypoint: e.waypoint ? { ...e.waypoint } : null,
-    orderQueue: e.orderQueue ? e.orderQueue.map(o => ({ ...o })) : [],
-    atkMoveDest: e.atkMoveDest ? { ...e.atkMoveDest } : null,
-    patrolA: e.patrolA ? { ...e.patrolA } : null,
-    patrolB: e.patrolB ? { ...e.patrolB } : null,
-  });
+  // Single-pass copy: avoids Object.assign double-write (copies all fields then re-writes overrides).
+  const s = Object.create(null);
+  for (const k in e) if (Object.prototype.hasOwnProperty.call(e, k)) s[k] = e[k];
+  s._isBuilding = e.isBuilding;
+  s.path        = e.path        ? [...e.path]                    : null;
+  s.trainQ      = e.trainQ      ? e.trainQ.map(q => ({ ...q })) : null;
+  s.harvestTile = e.harvestTile ? { ...e.harvestTile }           : null;
+  s.waypoint    = e.waypoint    ? { ...e.waypoint }              : null;
+  s.orderQueue  = e.orderQueue  ? e.orderQueue.map(o => ({ ...o })) : [];
+  s.atkMoveDest = e.atkMoveDest ? { ...e.atkMoveDest }           : null;
+  s.patrolA     = e.patrolA     ? { ...e.patrolA }               : null;
+  s.patrolB     = e.patrolB     ? { ...e.patrolB }               : null;
+  return s;
 }
 
 export function restoreSnapshot(snap) {
