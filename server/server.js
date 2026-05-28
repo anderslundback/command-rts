@@ -341,15 +341,18 @@ wss.on('connection', ws => {
         room.canonicalTick ??= 0;
         room.hashes[msg.tick] ??= {};
         room.hashes[msg.tick][meta.slot] = { hash: msg.hash, debug: msg.debug ?? null };
-        const entries = Object.values(room.hashes[msg.tick]);
+        const tickHashes = room.hashes[msg.tick];
+        const slots = Object.keys(tickHashes);
         const humanCount = room.players.filter(p => !p.isAI && !p.isEmpty).length;
-        if (entries.length >= humanCount) {
-          const hashes = entries.map(e => e.hash);
-          if (hashes.every(h => h === hashes[0])) {
+        if (slots.length >= humanCount) {
+          const firstHash = tickHashes[slots[0]].hash;
+          // Early-exit: scan slots once, short-circuit at first mismatch
+          const allMatch = slots.every(s => tickHashes[s].hash === firstHash);
+          if (allMatch) {
             room.canonicalTick = Math.max(room.canonicalTick, msg.tick);
           } else {
             // Find which components diverged
-            const debugEntries = entries.map(e => e.debug).filter(Boolean);
+            const debugEntries = slots.map(s => tickHashes[s].debug).filter(Boolean);
             const diverged = debugEntries.length >= 2
               ? ['entityH', 'creditsH', 'rngH', 'shellH', 'mapH', 'entN0', 'entN1', 'entN2', 'hpH', 'posH', 'oreH', 'bprogH'].filter(
                   k => !debugEntries.every(d => d[k] === debugEntries[0][k])
@@ -364,9 +367,11 @@ wss.on('connection', ws => {
             }
           }
         }
-        // Prune old hash entries
-        for (const t of Object.keys(room.hashes)) {
-          if (Number(t) < msg.tick - 40) delete room.hashes[t];
+        // Prune old hash entries — throttled to once per 40 ticks to avoid scanning on every message
+        if (msg.tick % 40 === 0) {
+          for (const t of Object.keys(room.hashes)) {
+            if (Number(t) < msg.tick - 40) delete room.hashes[t];
+          }
         }
         break;
       }
