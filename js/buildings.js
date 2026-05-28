@@ -47,9 +47,7 @@ export function updateBuilding(b) {
   if (b.trainQ.length) {
     const item = b.trainQ[0];
 
-    const speedMult = Math.max(1, state.entities.filter(
-      e => !e.dead && e.isBuilding && e.faction === b.faction && e.type === b.type && e.done
-    ).length);
+    const speedMult = Math.max(1, state._bldgCounts?.get(`${b.faction}:${b.type}`) ?? 1);
     const pwr = Math.round(Math.max(0.25, getPowerRatio(b.faction)) * 4) / 4;
     const k = Math.round(pwr * 4); // 1, 2, 3, or 4 — always integer
     const cost = UDEF[item.type]?.cost ?? 0;

@@ -204,6 +204,17 @@ function gameTick() {
   }
 
   if (!state.gameOver) {
+    // Rebuild building-type count cache once per tick — used by buildings.js for trainQ speedMult.
+    // Cheaper than buildings.js filtering all entities for each active trainQ entry.
+    const bc = state._bldgCounts ?? (state._bldgCounts = new Map());
+    bc.clear();
+    for (const e of state.entities) {
+      if (!e.dead && e.isBuilding && e.done) {
+        const k = `${e.faction}:${e.type}`;
+        bc.set(k, (bc.get(k) ?? 0) + 1);
+      }
+    }
+
     for (const e of state.entities) {
       if (e.dead) continue;
       if (e.isUnit)     updateUnit(e);
