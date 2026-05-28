@@ -15,7 +15,7 @@ import { uiStore } from './store.js';
 //   - mapRows is ALWAYS included so rollback can restore any tick correctly
 //   - fog.explored/visible are snapshotted so rollback doesn't reveal stale fog state
 export function saveSnapshot(forDump = false) {
-  return {
+  const snap = {
     tick: state.tick,
     eid: getEid(),
     rngState: state.rng.getState(),
@@ -31,7 +31,7 @@ export function saveSnapshot(forDump = false) {
     gameOverDelay: state.gameOverDelay,
     gameStats: { unitsLost: state.gameStats.unitsLost, enemiesKilled: state.gameStats.enemiesKilled, startTick: state.gameStats.startTick, endTick: state.gameStats.endTick },
     oreHistory: [...state.oreHistory],
-    mapRows: state.map.map(row => forDump ? Array.from(row) : row.slice()),
+    mapRows: (forDump || state.mapDirty) ? state.map.map(row => forDump ? Array.from(row) : row.slice()) : null,
     statusMsg: state.statusMsg,
     statusTimer: state.statusTimer,
     gameSpeed: state.gameSpeed,
@@ -39,6 +39,8 @@ export function saveSnapshot(forDump = false) {
     fogExplored: (!forDump && state.fog) ? state.fog.explored.slice() : null,
     fogVisible:  (!forDump && state.fog) ? state.fog.visible.slice()  : null,
   };
+  if (!forDump) state.mapDirty = false;
+  return snap;
 }
 
 function snapshotEnt(e) {
