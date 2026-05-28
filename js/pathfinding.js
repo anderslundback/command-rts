@@ -36,25 +36,32 @@ class MinHeap {
 const DIRS = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
 const SIZE = MW * MH;
 
+// Preallocated buffers — reused every A* call to avoid GC pressure in the combat hot path.
+const _occ    = new Uint8Array(SIZE);
+const _g      = new Float32Array(SIZE);
+const _came   = new Int32Array(SIZE);
+const _closed = new Uint8Array(SIZE);
+
 export function astar(sx, sy, ex, ey, ignoreUnits) {
   if (sx === ex && sy === ey) return [];
 
-  const occ = new Uint8Array(SIZE);
+  _occ.fill(0);
   for (const e of state.entities) {
     if (e.dead) continue;
     if (e.isBuilding) {
       if (e.type === 'depot') continue; // depot pad is walkable
       for (let dy = 0; dy < e.h; dy++)
         for (let dx = 0; dx < e.w; dx++)
-          occ[(e.y + dy) * MW + (e.x + dx)] = 1;
+          _occ[(e.y + dy) * MW + (e.x + dx)] = 1;
     } else if (e.isUnit && !ignoreUnits && !(e.x === sx && e.y === sy)) {
-      occ[e.y * MW + e.x] = 1;
+      _occ[e.y * MW + e.x] = 1;
     }
   }
 
-  const g = new Float32Array(SIZE).fill(Infinity);
-  const came = new Int32Array(SIZE).fill(-1);
-  const closed = new Uint8Array(SIZE);
+  _g.fill(Infinity);
+  _came.fill(-1);
+  _closed.fill(0);
+  const occ = _occ, g = _g, came = _came, closed = _closed;
   const sk = sy * MW + sx;
   g[sk] = 0;
 
