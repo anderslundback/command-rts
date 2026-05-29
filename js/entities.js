@@ -34,6 +34,7 @@ export class Building extends Ent {
     this.aspd = d.aspd || 0;
     this.atimer = 0;
     this.target = null;
+    this.manualTarget = false;
     this.repairing = false;
     this.waypoint = null;
     this.armorType  = d.armor  ?? 'building';
@@ -66,6 +67,7 @@ export class Unit extends Ent {
     this.target = null;
     this.harvestTile = null;
     this.refineryId = null;
+    this.manualRefinery = false;
     this.ore = 0;
     this.maxOre = 90;
     this.facing = 0;

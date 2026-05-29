@@ -2,6 +2,7 @@ import { TS, FDATA, ARMOR_MULT } from './constants.js';
 import { state } from './state.js';
 import { calcPower } from './resources.js';
 import { spawnExplosion, spawnMuzzle } from './particles.js';
+import { speak } from './audio.js';
 import { distToEnt } from './pathfinding.js';
 import { queryRect, nearestEnemy } from './spatial.js';
 
@@ -22,7 +23,14 @@ export function dealDmg(e, dmg, attacker) {
       const bpx = e.x * TS, bpy = e.y * TS, bpw = e.w * TS, bph = e.h * TS;
       const onScreen = bpx + bpw > state.cam.x && bpx < state.cam.x + state.canvas.width
                     && bpy + bph > state.cam.y && bpy < state.cam.y + state.canvas.height;
-      if (!onScreen) state.underAttackTimer = 300;
+      if (!onScreen) {
+        if (state.underAttackTimer <= 0) {
+          state.statusMsg = 'Base under attack!';
+          state.statusTimer = 120;
+          speak('Base under attack');
+        }
+        state.underAttackTimer = 100;
+      }
     }
   }
   if (attacker && attacker.px !== undefined) {

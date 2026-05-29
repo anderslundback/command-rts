@@ -251,10 +251,7 @@ function gameTick() {
     if (state.statusTimer > 0) state.statusTimer--;
     let i = state.moveIndicators.length;
     while (i--) { state.moveIndicators[i].t--; if (state.moveIndicators[i].t <= 0) state.moveIndicators.splice(i, 1); }
-    if (state.underAttackTimer > 0) {
-      state.underAttackTimer--;
-      if (state.underAttackTimer === 299 && !state.isRollingBack) setMsg('Base under attack!', 180);
-    }
+    if (state.underAttackTimer > 0) state.underAttackTimer--;
   }
 
   // The update block (incl. removeDeadEnts) is skipped once gameOver is set, but a

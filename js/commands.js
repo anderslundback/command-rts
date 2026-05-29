@@ -1,7 +1,7 @@
 import { BDEF, UDEF, FBONUSES, TS, MW, MH, T, TRANSPORT_SLOTS } from './constants.js';
 import { adjTile } from './pathfinding.js';
 import { state } from './state.js';
-import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderStop, orderHarvest } from './orders.js';
+import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderStop, orderHarvest, orderReturnTo } from './orders.js';
 import { placeBuilding, deployMcvInPlace, spawnNear } from './placement.js';
 import { calcPower } from './resources.js';
 import { playTrainingStart, playCancel, playBuildStart } from './audio.js';
@@ -29,6 +29,20 @@ export function applyCommand(cmd) {
     case 'harvest': {
       const ref = state.entById.get(cmd.refineryId);
       for (const id of cmd.ids) { const u = state.entById.get(id); if (u && ref) orderHarvest(u, ref); }
+      break;
+    }
+    case 'return_to': {
+      const ref = state.entById.get(cmd.refineryId);
+      for (const id of cmd.ids) { const u = state.entById.get(id); if (u && ref && !u.dead) orderReturnTo(u, ref); }
+      break;
+    }
+    case 'set_turret_target': {
+      const t = state.entById.get(cmd.targetId);
+      if (!t || t.dead) break;
+      for (const id of cmd.ids) {
+        const b = state.entById.get(id);
+        if (b && !b.dead && b.isBuilding) { b.target = cmd.targetId; b.manualTarget = true; }
+      }
       break;
     }
     case 'place': {

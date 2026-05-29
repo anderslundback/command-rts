@@ -92,8 +92,14 @@ export function updateBuilding(b) {
   if ((b.type === 'turret' || b.type === 'antiair') && b.dmg > 0 && hasPwr(b.faction)) {
     b.atimer++;
     const curTgt = b.target ? getEnt(b.target) : null;
-    if (!curTgt || curTgt.dead) {
+    // Hold the current target only while it is alive AND in range (anti-air still
+    // requires an air target). Out-of-range or dead → drop it and re-acquire.
+    const tgtValid = curTgt && !curTgt.dead && curTgt.faction !== b.faction &&
+                     distToEnt(b, curTgt) <= b.range &&
+                     (b.type !== 'antiair' || curTgt.armorType === 'air');
+    if (!tgtValid) {
       b.target = null;
+      b.manualTarget = false;
       const qr = Math.ceil(b.range) + 1;
       const qx0 = b.x - qr, qy0 = b.y - qr, qx1 = b.x + b.w - 1 + qr, qy1 = b.y + b.h - 1 + qr;
       if (b.type === 'antiair') {

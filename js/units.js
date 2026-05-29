@@ -147,7 +147,7 @@ export function updateUnit(u) {
 
     case 'attack': {
       const tgt = getEnt(u.target);
-      if (!tgt || tgt.dead) {
+      if (!tgt || tgt.dead || tgt.faction === u.faction) {
         u.target = null;
         if (u.atkMoveDest) {
           u.state = 'attack_move';
@@ -331,7 +331,7 @@ function updateNavalUnit(u) {
 
     case 'attack': {
       const tgt = getEnt(u.target);
-      if (!tgt || tgt.dead) {
+      if (!tgt || tgt.dead || tgt.faction === u.faction) {
         u.target = null;
         if (u.atkMoveDest) {
           u.state = 'attack_move';
@@ -423,7 +423,7 @@ function updateAirUnit(u) {
     }
     case 'attack': {
       const tgt = getEnt(u.target);
-      if (!tgt || tgt.dead) {
+      if (!tgt || tgt.dead || tgt.faction === u.faction) {
         u.target = null;
         if (u.atkMoveDest) { u.state = 'attack_move'; }
         else if (u.patrolA) { u.state = 'patrol'; }
@@ -486,8 +486,10 @@ function findReachableOre(u) {
 }
 
 function startReturn(u) {
-  let ref = getEnt(u.refineryId);
-  if (!ref || ref.dead) ref = nearestRefinery(u.faction, u.x, u.y);
+  // Manual assignment sticks; otherwise return to the nearest refinery from the
+  // current (ore-field) position so a newly built closer refinery is used.
+  let ref = u.manualRefinery ? getEnt(u.refineryId) : null;
+  if (!ref || ref.dead) { u.manualRefinery = false; ref = nearestRefinery(u.faction, u.x, u.y); }
   if (!ref) { u.state = 'idle'; return; }
   u.refineryId = ref.id;
   u.state = 'return';

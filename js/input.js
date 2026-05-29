@@ -364,6 +364,21 @@ function onRightClick(ev) {
   const f = state.playerFaction;
   const target = getEntAt(tx, ty);
 
+  // Selected turrets/antiair: right-click an enemy → manually focus that target.
+  if (target && target.faction !== f && !target.dead) {
+    const selTurrets = state.selected
+      .map(id => getEnt(id))
+      .filter(e => e?.isBuilding && e.faction === f && e.done && e.dmg > 0 &&
+                   (e.type === 'turret' || e.type === 'antiair'));
+    if (selTurrets.length) {
+      const cmd = { action: 'set_turret_target', ids: selTurrets.map(b => b.id), targetId: target.id };
+      if (state.net) scheduleInput(cmd); else applyCommand(cmd);
+      const ix = target.isBuilding ? (target.x + target.w / 2) * TS : target.px + TS / 2;
+      const iy = target.isBuilding ? (target.y + target.h / 2) * TS : target.py + TS / 2;
+      state.moveIndicators.push({ wx: ix, wy: iy, t: 30 });
+    }
+  }
+
   // Right-click own building: depot + vehicles selected → send to repair pad; otherwise set primary
   if (target?.isBuilding && target.faction === f) {
     const myVehicles = state.selected
@@ -444,10 +459,10 @@ function onRightClick(ev) {
     }
   } else if (target?.isBuilding && target.faction === f && target.type === 'refinery') {
     const harvesters = myUnits.filter(u => u.type === 'harvester');
-    if (state.net) {
-      if (harvesters.length) scheduleInput({ action: 'harvest', ids: harvesters.map(u => u.id), refineryId: target.id });
-    } else {
-      harvesters.forEach(u => orderHarvest(u, target));
+    if (harvesters.length) {
+      const cmd = { action: 'return_to', ids: harvesters.map(u => u.id), refineryId: target.id };
+      if (state.net) scheduleInput(cmd); else applyCommand(cmd);
+      setMsg('Harvester drop-off set', 60);
     }
   } else if (target?.isUnit && target.faction === f && target.capacity > 0 &&
              (target.type === 'transport' || target.type === 'chinook')) {

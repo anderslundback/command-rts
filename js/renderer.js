@@ -73,14 +73,6 @@ export function render() {
   renderDamageNumbers(ctx);
   renderDragBox(ctx);
   if (state.gameOver && state.gameOverDelay > 0) renderVictoryAnnouncement(ctx, VW, VH);
-  if (state.underAttackTimer > 0) {
-    const pulse = 0.35 + 0.35 * Math.sin(Date.now() / 120);
-    ctx.save();
-    ctx.strokeStyle = `rgba(255,0,0,${pulse})`;
-    ctx.lineWidth = 6;
-    ctx.strokeRect(3, 3, VW - 6, VH - 6);
-    ctx.restore();
-  }
 }
 
 // ── Tile rendering ────────────────────────────────────────────────────────────
@@ -386,7 +378,7 @@ export function renderMinimap() {
     mmx.fillText(hasRadar ? 'RADAR OFFLINE' : 'NO RADAR', mw / 2, mh / 2); mmx.textAlign = 'left';
     return;
   }
-  if (!state.minimapDirty && state.tick % 4 !== 0) return;
+  if (!state.minimapDirty && state.underAttackTimer <= 0 && state.tick % 4 !== 0) return;
   state.minimapDirty = false;
   const mmx = state.radarCtx;
   const mw = state.radar.width, mh = state.radar.height;
@@ -419,4 +411,8 @@ export function renderMinimap() {
   const vw = state.canvas.width / TS * sx, vh = state.canvas.height / TS * sy;
   mmx.strokeStyle = 'rgba(255,255,255,0.45)'; mmx.lineWidth = 1;
   mmx.strokeRect(vx, vy, vw, vh);
+  if (state.underAttackTimer > 0 && Math.floor(Date.now() / 250) % 2 === 0) {
+    mmx.strokeStyle = 'rgba(255,40,40,0.9)'; mmx.lineWidth = 3;
+    mmx.strokeRect(1.5, 1.5, mw - 3, mh - 3);
+  }
 }

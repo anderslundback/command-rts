@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { astar, astarNaval } from './pathfinding.js';
+import { astar, astarNaval, adjTile } from './pathfinding.js';
 import { nearestOre } from './map.js';
 import { nearestRefinery } from './resources.js';
 
@@ -60,8 +60,14 @@ export function orderAttackMove(u, tx, ty, queued = false) {
 }
 
 export function orderHarvest(u, refinery) {
-  const best = nearestRefinery(u.faction, u.x, u.y) || refinery;
-  u.refineryId = best.id;
+  // Keep a player-assigned refinery; otherwise pick the nearest one each cycle.
+  const assigned = u.manualRefinery ? state.entById.get(u.refineryId) : null;
+  if (assigned && !assigned.dead) {
+    u.refineryId = assigned.id;
+  } else {
+    u.manualRefinery = false;
+    u.refineryId = (nearestRefinery(u.faction, u.x, u.y) || refinery).id;
+  }
   const ore = nearestOre(u.x, u.y);
   if (ore) {
     u.harvestTile = ore;
@@ -70,6 +76,28 @@ export function orderHarvest(u, refinery) {
     u.mprog = 0;
   } else {
     u.state = 'idle';
+  }
+}
+
+// Player explicitly directs a harvester to drop off at a specific refinery.
+// Sticks (manualRefinery) so it keeps returning there until the refinery dies.
+export function orderReturnTo(u, refinery) {
+  u.refineryId = refinery.id;
+  u.manualRefinery = true;
+  if (u.ore > 0) {
+    u.state = 'return';
+    const dest = adjTile(refinery, u.x, u.y);
+    if (dest) { u.path = astar(u.x, u.y, dest.x, dest.y, false); u.mprog = 0; }
+  } else {
+    const ore = nearestOre(u.x, u.y);
+    if (ore) {
+      u.harvestTile = ore;
+      u.state = 'harvest';
+      u.path = astar(u.x, u.y, ore.x, ore.y, true);
+      u.mprog = 0;
+    } else {
+      u.state = 'idle';
+    }
   }
 }
 
