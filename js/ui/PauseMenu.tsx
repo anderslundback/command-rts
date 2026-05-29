@@ -10,6 +10,7 @@ const setVolume: (v: number) => void = (_A as any).setVolume;
 
 export function PauseMenu(): React.ReactElement {
   const [volume, setVolumeState] = useState<number>(() => state.volume ?? 0.5);
+  const [confirmSurrender, setConfirmSurrender] = useState(false);
   const netState = useUIStore(s => s.net);
   const lobby = useUIStore(s => s.lobby);
   const netPausedBySlot = useUIStore(s => s.netPausedBySlot);
@@ -34,6 +35,10 @@ export function PauseMenu(): React.ReactElement {
 
   const handleQuit = () => {
     import('../game.js').then((m: any) => m.showMenu()).catch(console.error);
+  };
+
+  const handleSurrender = () => {
+    import('../game.js').then((m: any) => m.surrender()).catch(console.error);
   };
 
   const handleVolume = (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,6 +114,17 @@ export function PauseMenu(): React.ReactElement {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <PauseBtn label="RESUME" color="#4d8" onClick={handleResume} />
+        {confirmSurrender ? (
+          <>
+            <div style={{ color: '#f86', fontSize: 11, letterSpacing: 2, textAlign: 'center' }}>
+              Surrender? All your units and structures will be destroyed.
+            </div>
+            <PauseBtn label="CONFIRM SURRENDER" color="#f64" onClick={handleSurrender} />
+            <PauseBtn label="CANCEL" color="#8ab" onClick={() => setConfirmSurrender(false)} />
+          </>
+        ) : (
+          <PauseBtn label="SURRENDER" color="#f64" onClick={() => setConfirmSurrender(true)} />
+        )}
         <PauseBtn label="QUIT TO MENU" color="#f64" onClick={handleQuit} />
       </div>
     </div>

@@ -283,6 +283,36 @@ assert('refinery (pwr=0.25): all deductions are whole integers', ref025.allDeduc
   }
 }
 
+// ── Pathfinding occupancy cache: rollback determinism ───────────────────────────
+// The occupancy grid is rebuilt at most once per tick (tick-stamped). Rollback replays the
+// SAME tick numbers the forward pass already stamped, so the stamp must be invalidated on
+// snapshot restore — otherwise the first replayed pathfind reuses the forward pass's stale
+// occupancy (built for a different input) → wrong paths → position desync.
+{
+  const { state } = await import('../js/state.js');
+  const { astar, invalidatePathCache } = await import('../js/pathfinding.js');
+
+  // All-grass map (passable everywhere) so occupancy comes purely from entities.
+  state.map = Array.from({ length: 60 }, () => new Uint8Array(80)); // 0 = GRASS
+  state.entities = [];
+  state.tick = 100;
+
+  const through = (path, tx, ty) => path.some(p => p.x === tx && p.y === ty);
+  const blocker = { isBuilding: true, type: 'power', x: 2, y: 0, w: 1, h: 1, dead: false };
+
+  invalidatePathCache();
+  astar(0, 0, 4, 0, false);          // no blocker → occupancy stamped for tick 100
+
+  // Simulate replay of the SAME tick with different entity state (blocker now present).
+  state.entities = [blocker];
+  const stale = astar(0, 0, 4, 0, false);   // stamp still 100 → reuses stale (empty) occupancy
+  assert('stale occupancy routes through blocker (demonstrates the hazard)', through(stale, 2, 0));
+
+  invalidatePathCache();                     // what restoreSnapshot now does on rollback
+  const fresh = astar(0, 0, 4, 0, false);
+  assert('invalidated cache reroutes around blocker', !through(fresh, 2, 0));
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} checks: ${passed} passed, ${failed} failed`);

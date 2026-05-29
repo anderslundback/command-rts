@@ -237,7 +237,8 @@ wss.on('connection', ws => {
         if (!meta) return;
         const room = rooms.get(meta.code);
         if (!room) return;
-        if (room.players.some((p, i) => i !== meta.slot && !p.isEmpty && p.faction === msg.faction)) {
+        // faction === -1 means SPECTATOR (no faction); spectators don't conflict
+        if (msg.faction !== -1 && room.players.some((p, i) => i !== meta.slot && !p.isEmpty && p.faction === msg.faction)) {
           send(ws, { type: 'error', reason: 'faction_taken' }); return;
         }
         room.players[meta.slot].faction = msg.faction;
@@ -251,6 +252,7 @@ wss.on('connection', ws => {
         if (!room || room.hostWs !== ws) return;
         const p = room.players[msg.slot];
         if (!p?.isAI) return;
+        if (msg.faction === -1) return; // AI cannot be a spectator
         if (room.players.some((q, i) => i !== msg.slot && !q.isEmpty && q.faction === msg.faction)) {
           send(ws, { type: 'error', reason: 'faction_taken' }); return;
         }
@@ -305,14 +307,17 @@ wss.on('connection', ws => {
         const humanPlayers = room.players.filter(p => !p.isAI && !p.isEmpty);
         const allReady = humanPlayers.filter(p => !p.isHost).every(p => p.ready);
         if (!allReady) { send(ws, { type: 'error', reason: 'not_all_ready' }); return; }
-        // Validate unique factions among active slots
-        const active = room.players.filter(p => !p.isEmpty);
+        // Validate unique factions among active PLAYING slots (spectators have faction -1)
+        const active = room.players.filter(p => !p.isEmpty && p.faction !== -1);
         const factions = active.map(p => p.faction);
         if (new Set(factions).size !== factions.length) {
           send(ws, { type: 'error', reason: 'duplicate_factions' }); return;
         }
+        if (active.length < 2) { send(ws, { type: 'error', reason: 'need_two_factions' }); return; }
         const mapSeed = (Math.random() * 0xffffffff) >>> 0;
-        const slotFactions = room.players.map(p => p.isEmpty ? null : p.faction);
+        // Spectator slots (faction -1) map to null: no entities placed, but the slot still
+        // runs the full deterministic sim and relays null inputs like any client.
+        const slotFactions = room.players.map(p => (p.isEmpty || p.faction === -1) ? null : p.faction);
         const aiSlots = room.players.map(p => !p.isEmpty && p.isAI);
         room.mapSeed = mapSeed; room.slotFactions = slotFactions; room.aiSlots = aiSlots;
         broadcast(room, { type: 'game_start', mapSeed, slotFactions, aiSlots, gameSpeed: room.gameSpeed ?? 4 });

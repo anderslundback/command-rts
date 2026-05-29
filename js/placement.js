@@ -5,7 +5,7 @@ import { T } from './constants.js';
 import { Building, Unit, addEnt } from './entities.js';
 import { calcPower } from './resources.js';
 
-export function canPlace(type, tx, ty, faction = -1, skipAdjacency = false) {
+export function canPlace(type, tx, ty, faction = -1, skipAdjacency = false, exclude = null) {
   const d = BDEF[type];
   if (tx < 0 || ty < 0 || tx + d.w > 80 || ty + d.h > 60) return false;
   const requiredTile = d.water ? T.WATER : T.GRASS;
@@ -13,8 +13,12 @@ export function canPlace(type, tx, ty, faction = -1, skipAdjacency = false) {
     for (let dx = 0; dx < d.w; dx++)
       if (getTile(tx + dx, ty + dy) !== requiredTile) return false;
   for (const e of state.entities) {
-    if (e.dead || !e.isBuilding) continue;
-    if (tx < e.x + e.w && tx + d.w > e.x && ty < e.y + e.h && ty + d.h > e.y) return false;
+    if (e.dead || e === exclude) continue;
+    if (e.isBuilding) {
+      if (tx < e.x + e.w && tx + d.w > e.x && ty < e.y + e.h && ty + d.h > e.y) return false;
+    } else if (e.isUnit && e.armorType !== 'air') {
+      if (e.x >= tx && e.x < tx + d.w && e.y >= ty && e.y < ty + d.h) return false;
+    }
   }
   if (!skipAdjacency && faction === state.playerFaction) {
     const own = state.entities.filter(e => !e.dead && e.isBuilding && e.faction === faction);
@@ -85,7 +89,7 @@ export function deployMcvInPlace(mcv) {
   ];
   for (const [dx, dy] of candidates) {
     const tx = mcv.x + dx, ty = mcv.y + dy;
-    if (canPlace('command', tx, ty, -1, true)) {
+    if (canPlace('command', tx, ty, -1, true, mcv)) {
       mcv.dead = true;
       const b = new Building(mcv.faction, 'command', tx, ty);
       b.bprog = 1;

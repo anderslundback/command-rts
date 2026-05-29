@@ -3,6 +3,7 @@ import { Building, Unit, getEid, setEid } from './entities.js';
 import { net } from './net/netClient.js';
 import { applyCommand } from './commands.js';
 import { uiStore } from './store.js';
+import { invalidatePathCache } from './pathfinding.js';
 
 // ── Snapshot (save/restore full game state for rollback) ──────────────────────
 
@@ -12,7 +13,10 @@ import { uiStore } from './store.js';
 //   - fog is omitted (client-local, would inflate the dump payload)
 // forDump=false (default): produce an in-memory snapshot for the rollback ring buffer.
 //   - mapRows uses TypedArray.slice (faster; never serialised to JSON)
-//   - mapRows is ALWAYS included so rollback can restore any tick correctly
+//   - mapRows is ALWAYS included so rollback can restore any tick correctly. It must NOT be
+//     gated on mapDirty: a rollback target may be a tick where the map was unchanged, yet ore
+//     depletion/regen occurred AFTER it — restoring without the map would keep those later
+//     changes and desync harvester ore/positions.
 //   - fog.explored/visible are snapshotted so rollback doesn't reveal stale fog state
 export function saveSnapshot(forDump = false) {
   const snap = {
@@ -31,7 +35,7 @@ export function saveSnapshot(forDump = false) {
     gameOverDelay: state.gameOverDelay,
     gameStats: { unitsLost: state.gameStats.unitsLost, enemiesKilled: state.gameStats.enemiesKilled, startTick: state.gameStats.startTick, endTick: state.gameStats.endTick },
     oreHistory: [...state.oreHistory],
-    mapRows: (forDump || state.mapDirty) ? state.map.map(row => forDump ? Array.from(row) : row.slice()) : null,
+    mapRows: state.map.map(row => forDump ? Array.from(row) : row.slice()),
     statusMsg: state.statusMsg,
     statusTimer: state.statusTimer,
     gameSpeed: state.gameSpeed,
@@ -61,6 +65,9 @@ function snapshotEnt(e) {
 }
 
 export function restoreSnapshot(snap) {
+  // Pathfinding occupancy is tick-stamped; replay reuses the same tick numbers the forward
+  // pass stamped, so clear the stamps here to force a correct rebuild on the next pathfind.
+  invalidatePathCache();
   if (snap.eid != null) setEid(snap.eid);
   state.rng.setState(snap.rngState);
   state.tick = snap.tick;

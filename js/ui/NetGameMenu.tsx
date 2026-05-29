@@ -10,6 +10,7 @@ const setVolume: (v: number) => void = (_A as any).setVolume;
 
 export function NetGameMenu(): React.ReactElement {
   const [volume, setVolumeState] = useState<number>(() => state.volume ?? 0.5);
+  const [confirmSurrender, setConfirmSurrender] = useState(false);
   const netPauseCredits = useUIStore(s => s.netPauseCredits);
   const lobby = useUIStore(s => s.lobby);
 
@@ -30,6 +31,10 @@ export function NetGameMenu(): React.ReactElement {
 
   const handleQuit = () => {
     import('../game.js').then((m: any) => m.showMenu()).catch(console.error);
+  };
+
+  const handleSurrender = () => {
+    import('../game.js').then((m: any) => m.surrender()).catch(console.error);
   };
 
   const handleVolume = (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,6 +103,17 @@ export function NetGameMenu(): React.ReactElement {
           onClick={handlePause}
           disabled={!canPause}
         />
+        {confirmSurrender ? (
+          <>
+            <div style={{ color: '#f86', fontSize: 11, letterSpacing: 1, textAlign: 'center', maxWidth: 260 }}>
+              Surrender? All your units and structures will be destroyed.
+            </div>
+            <NetMenuBtn label="CONFIRM SURRENDER" color="#f64" onClick={handleSurrender} />
+            <NetMenuBtn label="CANCEL" color="#8ab" onClick={() => setConfirmSurrender(false)} />
+          </>
+        ) : (
+          <NetMenuBtn label="SURRENDER" color="#f64" onClick={() => setConfirmSurrender(true)} />
+        )}
         <NetMenuBtn label="QUIT TO MENU" color="#f64" onClick={handleQuit} />
         <NetMenuBtn label="CLOSE" color="#4d8" onClick={handleClose} />
       </div>

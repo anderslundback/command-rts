@@ -200,6 +200,11 @@ export function applyCommand(cmd) {
       });
       break;
     }
+    case 'surrender': {
+      for (const e of state.entities)
+        if (!e.dead && e.faction === cmd.faction) e.dead = true;
+      break;
+    }
   }
 }
 

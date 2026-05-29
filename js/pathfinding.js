@@ -44,7 +44,9 @@ const SIZE = MW * MH;
 // The per-call start-tile exclusion is dropped: the start node is closed before any neighbour
 // can re-enter it, so its occupancy bit is never read. The grid is therefore a pure function of
 // state.entities at the tick's first pathfind call — identical across clients (deterministic).
-// After rollback, state.tick is restored so the stamp mismatches and forces a correct rebuild.
+// Rollback replays the SAME tick numbers the forward pass already stamped, so the stamps must
+// be cleared explicitly via invalidatePathCache() (called from restoreSnapshot) — otherwise the
+// first replayed pathfind reuses the forward pass's stale occupancy.
 const _occ     = new Uint8Array(SIZE);
 const _occNoU  = new Uint8Array(SIZE);
 let   _occTick = -1, _occNoUTick = -1;
@@ -52,6 +54,15 @@ const _g      = new Float32Array(SIZE);
 const _came   = new Int32Array(SIZE);
 const _closed = new Uint8Array(SIZE);
 const _heap   = new MinHeap();
+
+// Invalidate the per-tick occupancy stamps. MUST be called on every snapshot restore
+// (rollback / state-dump): replay re-runs the SAME tick numbers the forward pass already
+// stamped, so without this the first replayed pathfind would reuse the forward pass's stale
+// occupancy (built for a different input) → wrong paths → position desync. The naval/land
+// stamps live in this module, so the reset must happen here.
+export function invalidatePathCache() {
+  _occTick = -1; _occNoUTick = -1; _noccTick = -1; _noccNoUTick = -1;
+}
 
 function _buildLandOcc(grid, includeUnits) {
   grid.fill(0);

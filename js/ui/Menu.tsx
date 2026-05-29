@@ -597,6 +597,23 @@ export function Menu(): React.ReactElement {
               </button>
             )}
             <button
+              onClick={() => { import('../game.js').then((m: any) => m.spectate()).catch(console.error); }}
+              style={{
+                background: '#06080e',
+                border: '2px solid #1a2230',
+                color: '#4d8',
+                fontFamily: "'Courier New', monospace",
+                fontSize: 13,
+                letterSpacing: 2,
+                padding: '10px 28px',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => ((e.target as HTMLButtonElement).style.borderColor = '#4d8')}
+              onMouseLeave={e => ((e.target as HTMLButtonElement).style.borderColor = '#1a2230')}
+            >
+              SPECTATE
+            </button>
+            <button
               onClick={handleReturnToMenu}
               style={{
                 background: '#06080e',

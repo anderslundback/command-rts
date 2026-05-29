@@ -77,4 +77,8 @@ export const state = {
   factionCache: null, // [faction] = { units, buildings, doneBuildings } — derived per-tick cache; NEVER snapshotted
   grid: null,         // spatial bucket grid — derived per-tick from state.entities; NEVER snapshotted
   _lastNetStall: false, // debounce: tracks last value pushed to uiStore.netStall
+  revealAll: false,  // client-local: full map reveal (surrender/spectate); NEVER snapshotted
+  surrendered: false, // client-local: this player has surrendered
+  spectating: false,  // client-local: results screen closed, panning the revealed map
+  isSpectator: false, // client-local: this client joined as a spectator (no faction); NEVER snapshotted
 };

@@ -2,14 +2,14 @@ import { MW, MH } from './constants.js';
 import { state } from './state.js';
 
 const VISION_R = {
-  rifleman: 4, rocketeer: 4, harvester: 5,
-  scout: 6, aatrack: 5, tank: 5, mcv: 5,
-  artillery: 5, v2rocket: 5, tomahawk: 5,
-  fighter: 8, gunship: 6, drone: 8, chinook: 5,
-  command: 5, power: 3, refinery: 3, barracks: 3,
-  factory: 3, depot: 3, radar: 9, airfield: 4,
-  turret: 4, antiair: 5, navalyard: 4,
-  cruiser: 8, destroyer: 6, submarine: 5, transport: 5,
+  rifleman: 6, rocketeer: 6, harvester: 7,
+  scout: 9, aatrack: 7, tank: 7, mcv: 7,
+  artillery: 7, v2rocket: 7, tomahawk: 7,
+  fighter: 11, gunship: 9, drone: 11, chinook: 7,
+  command: 8, power: 5, refinery: 5, barracks: 5,
+  factory: 5, depot: 5, radar: 13, airfield: 6,
+  turret: 6, antiair: 7, navalyard: 6,
+  cruiser: 11, destroyer: 9, submarine: 7, transport: 7,
 };
 
 export function initFog() {
@@ -22,10 +22,11 @@ export function initFog() {
 export function updateFog() {
   const { fog, entities, playerFaction } = state;
   if (!fog?.visible) return;
+  if (state.revealAll) { fog.visible.fill(1); fog.explored.fill(1); return; }
   fog.visible.fill(0);
   for (const e of entities) {
     if (e.dead || e.faction !== playerFaction) continue;
-    const vr = VISION_R[e.type] ?? 4;
+    const vr = VISION_R[e.type] ?? 6;
     const cx = e.isBuilding ? e.x + e.w / 2 : e.x + 0.5;
     const cy = e.isBuilding ? e.y + e.h / 2 : e.y + 0.5;
     const vrSq = vr * vr;

@@ -58,6 +58,14 @@ export function startGame(pf, aiFactions = null, mapSeed = null) {
 // ── Multiplayer host/client entry ────────────────────────────────────────────
 
 export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions, gameSpeed = 4) {
+  // A spectator slot has no faction (slotFactions[mySlot] === null) but still runs the
+  // full deterministic sim and relays null inputs like any client.
+  const isSpectator = myFaction == null;
+  // playerFaction must be a valid playing faction so camera/UI reads stay well-formed,
+  // even though the spectator's HUD is suppressed. Use the first playing faction.
+  const viewFaction = isSpectator
+    ? (slotFactions.find(f => f != null) ?? 0)
+    : myFaction;
   state.rng = makeLCG(mapSeed);
   // 64-tick buffer covers ~3.2s at NORMAL speed (50ms/tick), enough for >200ms RTT at all speeds
   const humanSlots = new Set();
@@ -68,8 +76,11 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions, 
   state.net = { myFaction, mySlot, slotFactions, mapSeed, aiSlots, pauseCredits: [3, 3, 3], pausedBySlot: -1 };
   state.mapSeed = mapSeed;
   state.syncDebug = { entityH: 0, creditsH: 0, rngH: 0, shellH: 0, mapH: 0, tick: 0, resyncs: 0, lastDesyncTick: 0, diverged: [], stallCount: 0, nullsSent: 0, log: [], hasWarning: false, cred: [0, 0, 0], entN: [0, 0, 0], entH: [0, 0, 0], hpH: 0, posH: 0, oreH: 0, bprogH: 0 };
-  _resetGameState(myFaction, [1500, 1500, 1500]);
+  _resetGameState(viewFaction, [1500, 1500, 1500]);
   state.gameSpeed = gameSpeed;
+  state.isSpectator = isSpectator;
+  // Spectators see the whole map with no fog (updateFog() early-returns on revealAll).
+  if (isSpectator) state.revealAll = true;
 
   genMapFromSeed(mapSeed);
   _populateOreHistory();
@@ -99,7 +110,8 @@ export function startNetGame(mapSeed, mySlot, myFaction, aiSlots, slotFactions, 
   };
   net.on('input', _netInputHandler);
 
-  _centerCamOn(mySlot);
+  // Spectator's own slot has no base — center on the first playing slot instead.
+  _centerCamOn(isSpectator ? slotFactions.findIndex(f => f != null) : mySlot);
   syncFromGameState();
   if (state.frameId) { cancelAnimationFrame(state.frameId); clearTimeout(state.frameId); }
   resetAccumulator();
@@ -119,6 +131,10 @@ export function showMenu() {
   state.paused = false;
   state.menuOpen = false;
   state._dirty = false;
+  state.revealAll = false;
+  state.surrendered = false;
+  state.spectating = false;
+  state.isSpectator = false;
   uiStore.setState({ desync: false, netStall: false });
   syncFromGameState();
 }
@@ -130,6 +146,7 @@ export function togglePause() {
 }
 
 export function requestNetPause() {
+  if (state.isSpectator) return;
   if (!state.net || !state.gameStarted || state.gameOver || state.paused) return;
   const slot = state.net.mySlot;
   if ((state.net.pauseCredits?.[slot] ?? 0) <= 0) return;
@@ -139,6 +156,44 @@ export function requestNetPause() {
 export function requestNetResume() {
   if (!state.net || !state.paused) return;
   import('./net/netClient.js').then(m => m.net.send({ type: 'net_resume' }));
+}
+
+export function surrender() {
+  if (state.isSpectator) return;
+  if (!state.gameStarted || state.gameOver || state.surrendered) return;
+  const cmd = { action: 'surrender', faction: state.playerFaction };
+  if (state.net) {
+    import('./net/netClient.js').then(m => m.scheduleInput(cmd));
+  } else {
+    applyCommand(cmd);
+  }
+  // Client-local reveal/spectate — never snapshotted, never affects sim hash.
+  state.revealAll = true;
+  state.surrendered = true;
+  // updateFog() stops running after gameOver, so fill the fog arrays once here.
+  if (state.fog?.visible) { state.fog.visible.fill(1); state.fog.explored.fill(1); }
+  state.minimapDirty = true;
+  // Leave any pause so the sim keeps running to resolve victory for the remaining player.
+  if (state.net) { if (state.paused) requestNetResume(); }
+  else { state.paused = false; }
+  state.menuOpen = false;
+  syncFromGameState();
+}
+
+// Enter free-look spectate: reveal the full map and let the player pan around.
+// Used by both the surrender screen and the game-over (victory/defeat) screen.
+export function spectate() {
+  if (!state.gameStarted) return;
+  state.revealAll = true;
+  if (state.fog?.visible) { state.fog.visible.fill(1); state.fog.explored.fill(1); }
+  state.minimapDirty = true;
+  state.spectating = true;
+  syncFromGameState();
+}
+
+export function showResults() {
+  state.spectating = false;
+  syncFromGameState();
 }
 
 export function setGameSpeed(index) {
@@ -250,6 +305,10 @@ function _resetGameState(playerFaction, startCredits) {
   state._replayEndTick = 0;
   state._lastGroupKey = -1;
   state._lastGroupTime = 0;
+  state.revealAll = false;
+  state.surrendered = false;
+  state.spectating = false;
+  state.isSpectator = false;
   resetEid();
 }
 
@@ -290,6 +349,7 @@ registerGameCallbacks({
   scheduleInput: (cmd) => {
     if (!state.rollback) return;
     if (state.replayMode) return;
+    if (state.isSpectator) return; // spectators never issue commands
     const nextTick = state.tick + 1;
     state.rollback.inputHistory[nextTick] ??= {};
     state.rollback.inputHistory[nextTick][state.net.mySlot] = cmd;

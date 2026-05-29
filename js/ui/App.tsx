@@ -7,11 +7,15 @@ import { PauseMenu } from './PauseMenu';
 import { NetGameMenu } from './NetGameMenu';
 import { LobbyScreen } from './LobbyScreen';
 import { BugReportModal } from './BugReportModal';
+import { SurrenderScreen } from './SurrenderScreen';
+import { SpectateBar } from './SpectateBar';
 
 export function App(): React.ReactElement {
   const phase = useUIStore(s => s.phase);
   const bugReportOpen = useUIStore(s => s.bugReportOpen);
   const menuOpen = useUIStore(s => s.menuOpen);
+  const surrendered = useUIStore(s => s.surrendered);
+  const spectating = useUIStore(s => s.spectating);
 
   return (
     <div
@@ -23,19 +27,27 @@ export function App(): React.ReactElement {
         fontFamily: "'Courier New', monospace",
       }}
     >
-      {(phase === 'playing' || phase === 'paused') && (
+      {spectating ? (
+        <SpectateBar />
+      ) : surrendered ? (
+        <SurrenderScreen />
+      ) : (
         <>
-          <HUD />
-          <Sidebar />
+          {(phase === 'playing' || phase === 'paused') && (
+            <>
+              <HUD />
+              <Sidebar />
+            </>
+          )}
+
+          {(phase === 'menu' || phase === 'gameover') && <Menu />}
+
+          {phase === 'lobby' && <LobbyScreen />}
+
+          {phase === 'playing' && menuOpen && <NetGameMenu />}
+          {phase === 'paused' && <PauseMenu />}
         </>
       )}
-
-      {(phase === 'menu' || phase === 'gameover') && <Menu />}
-
-      {phase === 'lobby' && <LobbyScreen />}
-
-      {phase === 'playing' && menuOpen && <NetGameMenu />}
-      {phase === 'paused' && <PauseMenu />}
 
       {bugReportOpen && <BugReportModal />}
     </div>

@@ -152,6 +152,9 @@ export interface UIState {
   syncDebug: SyncDebugState | null;
   bugReportOpen: boolean;
   menuOpen: boolean;
+  surrendered: boolean;
+  spectating: boolean;
+  isSpectator: boolean;
   netPauseCredits: [number, number, number];
   netPausedBySlot: number;
 }
@@ -191,6 +194,9 @@ const initialState: UIState = {
   syncDebug: null,
   bugReportOpen: false,
   menuOpen: false,
+  surrendered: false,
+  spectating: false,
+  isSpectator: false,
   netPauseCredits: [3, 3, 3],
   netPausedBySlot: -1,
 };
@@ -308,6 +314,9 @@ export function syncFromGameState(): void {
     netStall: !!(s.rollback?._stallStart != null && (performance.now() - (s.rollback._stallStart as number)) >= 150),
     syncDebug: s.syncDebug ? { ...s.syncDebug } : null,
     menuOpen: s.menuOpen ?? false,
+    surrendered: s.surrendered ?? false,
+    spectating: s.spectating ?? false,
+    isSpectator: s.isSpectator ?? false,
     netPauseCredits: s.net?.pauseCredits ? ([...s.net.pauseCredits] as [number, number, number]) : [3, 3, 3],
     netPausedBySlot: s.net?.pausedBySlot ?? -1,
   });

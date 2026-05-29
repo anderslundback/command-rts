@@ -257,6 +257,11 @@ function gameTick() {
     }
   }
 
+  // The update block (incl. removeDeadEnts) is skipped once gameOver is set, but a
+  // surrender marks entities dead on the very tick victory triggers — purge them here
+  // so the spectated/final map is clean. Deterministic: every client runs this identically.
+  if (state.gameOver) removeDeadEnts();
+
   if (state.rollback) storeTickSnapshot();
 
   if (state.rollback && !state.isRollingBack && state.tick % 20 === 0) {
