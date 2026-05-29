@@ -4,7 +4,7 @@ import { getEnt } from './entities.js';
 import { calcPower, hasPwr, nearestRefinery, getPowerRatio } from './resources.js';
 import { dealDmg } from './combat.js';
 import { spawnMuzzle } from './particles.js';
-import { spawnNear, placeBuilding } from './placement.js';
+import { spawnNear, spawnNearNaval, placeBuilding } from './placement.js';
 import { orderMove, orderHarvest } from './orders.js';
 import { distToEnt } from './pathfinding.js';
 import { setMsg } from './hud.js';
@@ -72,9 +72,9 @@ export function updateBuilding(b) {
     if (canAdvance) {
       item.t = Math.min(item.total, item.t + speedMult * pwr);
       if (item.t >= item.total) {
-        b.doorEvent = state.tick; // open door for unit exit animation
+        b.doorEvent = state.tick;
         b.trainQ.shift();
-        const u = spawnNear(b.faction, item.type, b);
+        const u = b.type === 'navalyard' ? spawnNearNaval(b.faction, item.type, b) : spawnNear(b.faction, item.type, b);
         if (u) {
           if (b.waypoint && u.type !== 'harvester') {
             orderMove(u, b.waypoint.tx, b.waypoint.ty);
@@ -132,7 +132,8 @@ export function updateBuilding(b) {
           const tpx = t.isBuilding ? (t.x + t.w / 2) * 32 : t.px + 16;
           const tpy = t.isBuilding ? (t.y + t.h / 2) * 32 : t.py + 16;
           const facing = Math.atan2(tpy - bpy, tpx - bpx);
-          spawnMuzzle(bpx + Math.cos(facing) * 13, bpy + Math.sin(facing) * 13, FDATA[b.faction].color);
+          const muzzleDist = b.type === 'turret' ? 20 : 16;
+          spawnMuzzle(bpx + Math.cos(facing) * muzzleDist, bpy + Math.sin(facing) * muzzleDist, FDATA[b.faction].color);
         }
       }
     }

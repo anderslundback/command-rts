@@ -1,6 +1,6 @@
 import { MW, MH } from './constants.js';
 import { state } from './state.js';
-import { passable } from './map.js';
+import { passable, passableNaval } from './map.js';
 
 class MinHeap {
   constructor() { this.d = []; }
@@ -101,6 +101,85 @@ export function astar(sx, sy, ex, ey, ignoreUnits) {
     }
   }
   return [];
+}
+
+// Separate preallocated buffers for naval pathfinding (runs concurrently with land A*)
+const _nocc    = new Uint8Array(SIZE);
+const _ng      = new Float32Array(SIZE);
+const _ncame   = new Int32Array(SIZE);
+const _nclosed = new Uint8Array(SIZE);
+
+export function astarNaval(sx, sy, ex, ey, ignoreUnits) {
+  if (sx === ex && sy === ey) return [];
+
+  _nocc.fill(0);
+  for (const e of state.entities) {
+    if (e.dead) continue;
+    if (e.isBuilding) {
+      for (let dy = 0; dy < e.h; dy++)
+        for (let dx = 0; dx < e.w; dx++)
+          _nocc[(e.y + dy) * MW + (e.x + dx)] = 1;
+    } else if (e.isUnit && e.armorType === 'naval' && !ignoreUnits && !(e.x === sx && e.y === sy)) {
+      _nocc[e.y * MW + e.x] = 1;
+    }
+  }
+
+  _ng.fill(Infinity);
+  _ncame.fill(-1);
+  _nclosed.fill(0);
+  const occ = _nocc, g = _ng, came = _ncame, closed = _nclosed;
+  const sk = sy * MW + sx;
+  g[sk] = 0;
+
+  const open = new MinHeap();
+  open.push({ x: sx, y: sy, f: Math.abs(sx - ex) + Math.abs(sy - ey) });
+
+  let iters = 0;
+  while (open.size > 0 && ++iters < 3000) {
+    const cur = open.pop();
+    const ck = cur.y * MW + cur.x;
+    if (closed[ck]) continue;
+    closed[ck] = 1;
+
+    if (cur.x === ex && cur.y === ey) {
+      const path = [];
+      let k = ck;
+      while (came[k] >= 0) {
+        path.unshift({ x: k % MW, y: (k / MW) | 0 });
+        k = came[k];
+      }
+      return path;
+    }
+
+    for (const d of DIRS) {
+      const nx = cur.x + d.x, ny = cur.y + d.y;
+      if (!passableNaval(nx, ny)) continue;
+      const nk = ny * MW + nx;
+      if (closed[nk]) continue;
+      const isGoal = nx === ex && ny === ey;
+      if (occ[nk] && !isGoal) continue;
+      const ng = g[ck] + 1;
+      if (ng < g[nk]) {
+        came[nk] = ck;
+        g[nk] = ng;
+        open.push({ x: nx, y: ny, f: ng + Math.abs(nx - ex) + Math.abs(ny - ey) });
+      }
+    }
+  }
+  return [];
+}
+
+export function adjTileNaval(b, fx, fy) {
+  let best = null, bd = Infinity;
+  for (let dy = -1; dy <= b.h; dy++)
+    for (let dx = -1; dx <= b.w; dx++) {
+      if (dx > -1 && dx < b.w && dy > -1 && dy < b.h) continue;
+      const nx = b.x + dx, ny = b.y + dy;
+      if (!passableNaval(nx, ny)) continue;
+      const d = Math.abs(nx - fx) + Math.abs(ny - fy);
+      if (d < bd) { bd = d; best = { x: nx, y: ny }; }
+    }
+  return best;
 }
 
 export function adjTile(b, fx, fy) {

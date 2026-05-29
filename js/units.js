@@ -1,18 +1,25 @@
-import { TS, FDATA, FBONUSES, VEHICLE_TYPES } from './constants.js';
+import { TS, FDATA, FBONUSES, VEHICLE_TYPES, NAVAL_TYPES, TRANSPORT_SLOTS, BDEF } from './constants.js';
 import { state } from './state.js';
 import { getTile, nearestOre } from './map.js';
 import { T } from './constants.js';
 import { getEnt } from './entities.js';
-import { astar, adjTile, adjToBuilding, distToEnt } from './pathfinding.js';
-import { nearestRefinery, hasPwr } from './resources.js';
+import { astar, astarNaval, adjTile, adjToBuilding, distToEnt } from './pathfinding.js';
+import { nearestRefinery, hasPwr, calcPower } from './resources.js';
 import { dealDmg, dealSplash, autoAttack } from './combat.js';
 import { spawnShell } from './shells.js';
+import { spawnMuzzle } from './particles.js';
 import { orderHarvest, orderMove, orderAttack, orderAttackMove, orderPatrol } from './orders.js';
 import { playShot, playCash } from './audio.js';
 
 
 export function updateUnit(u) {
-  if (u.armorType === 'air') { updateAirUnit(u); return; }
+  if (u.armorType === 'air')   { updateAirUnit(u);   return; }
+  if (u.armorType === 'naval') { updateNavalUnit(u); return; }
+  if (u.loaded) {
+    const t = u.onTransport ? getEnt(u.onTransport) : null;
+    if (!t || t.dead) u.dead = true;
+    return;
+  }
 
   if (u.hitFlash > 0) u.hitFlash--;
 
@@ -54,8 +61,63 @@ export function updateUnit(u) {
 
     case 'move':
       stepPath(u);
-      if (!u.path.length) dequeueNext(u);
+      if (!u.path.length) {
+        if (u.boardingTarget) {
+          const transport = getEnt(u.boardingTarget);
+          if (transport && !transport.dead) {
+            let adjacent;
+            if (transport.armorType === 'air') {
+              const px = (u.px + TS / 2) - (transport.px + TS / 2);
+              const py = (u.py + TS / 2) - (transport.py + TS / 2);
+              adjacent = Math.sqrt(px * px + py * py) < TS * 1.8;
+            } else {
+              adjacent = Math.abs(u.x - transport.x) <= 1 && Math.abs(u.y - transport.y) <= 1;
+            }
+            if (adjacent) {
+              const uSlots = TRANSPORT_SLOTS[u.armorType] ?? 1;
+              const used = transport.cargo.reduce((s, uid) => { const cu = getEnt(uid); return s + (cu ? (TRANSPORT_SLOTS[cu.armorType] ?? 1) : 0); }, 0);
+              if (used + uSlots <= transport.capacity) {
+                u.loaded = true; u.onTransport = transport.id; u.state = 'idle';
+                transport.cargo.push(u.id);
+                if (transport.type === 'chinook') transport.grounded = 80;
+              }
+            }
+          }
+          u.boardingTarget = null;
+        }
+        if (u.captureTarget) {
+          const b = getEnt(u.captureTarget);
+          if (b && !b.dead && b.faction !== u.faction && adjToBuilding(u.x, u.y, b)) {
+            u.state = 'capture'; break;
+          }
+          u.captureTarget = null;
+        }
+        if (u.repairBuildingTarget) {
+          const b = getEnt(u.repairBuildingTarget);
+          if (b && !b.dead && b.faction === u.faction && adjToBuilding(u.x, u.y, b)) {
+            b.hp = b.maxHp; u.dead = true; u.repairBuildingTarget = null; break;
+          }
+          u.repairBuildingTarget = null;
+        }
+        dequeueNext(u);
+      }
       break;
+
+    case 'capture': {
+      const b = getEnt(u.captureTarget);
+      if (!b || b.dead || b.faction === u.faction) { u.captureTarget = null; u.captureProgress = 0; dequeueNext(u); break; }
+      if (!adjToBuilding(u.x, u.y, b)) { u.captureTarget = null; u.captureProgress = 0; dequeueNext(u); break; }
+      u.captureProgress++;
+      const captureTime = b.type === 'command'
+        ? 360
+        : Math.round(Math.max(140, (BDEF[b.type]?.cost ?? 500) * 0.14));
+      if (u.captureProgress >= captureTime) {
+        b.faction = u.faction; b.trainQ = []; b.repairing = false;
+        calcPower(); state.minimapDirty = true;
+        u.dead = true;
+      }
+      break;
+    }
 
     case 'attack_move': {
       // Scan for nearest enemy in range
@@ -201,6 +263,24 @@ export function updateUnit(u) {
       break;
     }
   }
+
+  // Medic passive heal: heals 3 HP to one nearby friendly infantry every second
+  if (u.type === 'medic' && state.tick % 20 === 0) {
+    for (const e of state.entities) {
+      if (e.dead || e.loaded || e === u || e.faction !== u.faction || !e.isUnit) continue;
+      if (e.armorType !== 'infantry') continue;
+      if (e.hp < e.maxHp && distToEnt(u, e) <= u.range) { e.hp = Math.min(e.maxHp, e.hp + 3); break; }
+    }
+  }
+
+  // Mechanic passive repair: repairs 5 HP to one nearby friendly vehicle every second
+  if (u.type === 'mechanic' && state.tick % 20 === 0) {
+    for (const e of state.entities) {
+      if (e.dead || e.loaded || e === u || e.faction !== u.faction || !e.isUnit) continue;
+      if (!VEHICLE_TYPES.has(e.type)) continue;
+      if (e.hp < e.maxHp && distToEnt(u, e) <= u.range) { e.hp = Math.min(e.maxHp, e.hp + 5); break; }
+    }
+  }
 }
 
 // ── Order queue ───────────────────────────────────────────────────────────────
@@ -220,10 +300,116 @@ function dequeueNext(u) {
   }
 }
 
+// ── Naval unit logic ──────────────────────────────────────────────────────────
+
+function updateNavalUnit(u) {
+  if (u.hitFlash > 0) u.hitFlash--;
+
+  switch (u.state) {
+    case 'idle':
+      autoAttack(u);
+      break;
+
+    case 'move':
+      stepPath(u);
+      if (!u.path.length) dequeueNext(u);
+      break;
+
+    case 'attack_move': {
+      let nearest = null, nearestDist = Infinity;
+      for (const e of state.entities) {
+        if (!e.dead && e.faction !== u.faction) {
+          const d = distToEnt(u, e);
+          if (d < u.range + 0.5 && d < nearestDist && u.dmg > 0) { nearest = e; nearestDist = d; }
+        }
+      }
+      if (nearest) {
+        u.state = 'attack'; u.target = nearest.id; u.path = [];
+      } else {
+        stepPath(u);
+        if (!u.path.length) { u.atkMoveDest = null; dequeueNext(u); }
+      }
+      break;
+    }
+
+    case 'patrol': {
+      let nearest = null, nearestDist = Infinity;
+      for (const e of state.entities) {
+        if (!e.dead && e.faction !== u.faction && u.dmg > 0) {
+          const d = distToEnt(u, e);
+          if (d < u.range + 0.5 && d < nearestDist) { nearest = e; nearestDist = d; }
+        }
+      }
+      if (nearest) { u.state = 'attack'; u.target = nearest.id; u.path = []; break; }
+      stepPath(u);
+      if (!u.path.length) {
+        const tmp = u.patrolA; u.patrolA = u.patrolB; u.patrolB = tmp;
+        u.path = astarNaval(u.x, u.y, u.patrolB.tx, u.patrolB.ty, false);
+        u.mprog = 0;
+      }
+      break;
+    }
+
+    case 'attack': {
+      const tgt = getEnt(u.target);
+      if (!tgt || tgt.dead) {
+        u.target = null;
+        if (u.atkMoveDest) {
+          u.state = 'attack_move';
+          u.path = astarNaval(u.x, u.y, u.atkMoveDest.tx, u.atkMoveDest.ty, false);
+          u.mprog = 0;
+        } else if (u.patrolA) {
+          u.state = 'patrol';
+          if (!u.path.length) { u.path = astarNaval(u.x, u.y, u.patrolB.tx, u.patrolB.ty, false); u.mprog = 0; }
+        } else {
+          dequeueNext(u);
+        }
+        break;
+      }
+      const dist = distToEnt(u, tgt);
+      const facTx = (tgt.isBuilding ? tgt.x + tgt.w / 2 : tgt.x) * TS;
+      const facTy = (tgt.isBuilding ? tgt.y + tgt.h / 2 : tgt.y) * TS;
+      u.facing = Math.atan2(facTy - (u.py + TS / 2), facTx - (u.px + TS / 2));
+      if (dist <= u.range) {
+        u.path = [];
+        if (++u.atimer >= u.aspd) {
+          u.atimer = 0;
+          const ttx = facTx, tty = facTy;
+          if (u.splash) {
+            spawnShell(u.px + TS / 2, u.py + TS / 2, ttx, tty, u, u.dmg, u.splash * TS);
+            if (!state.isRollingBack) {
+              const f = u.facing;
+              spawnMuzzle(u.px + TS / 2 + Math.cos(f) * TS * 0.7, u.py + TS / 2 + Math.sin(f) * TS * 0.7, FDATA[u.faction].color);
+            }
+          } else {
+            dealDmg(tgt, u.dmg, u);
+          }
+          const { cam, canvas } = state;
+          if (!state.isRollingBack &&
+              u.px >= cam.x - 200 && u.px <= cam.x + canvas.width + 200 &&
+              u.py >= cam.y - 200 && u.py <= cam.y + canvas.height + 200) {
+            playShot(u.type);
+          }
+        }
+      } else {
+        // Navigate on water toward target; if target is on land, path may be empty — ship holds position and fires if range allows
+        if (!u.path.length || state.tick % 20 === 0) {
+          const tx = tgt.isBuilding ? tgt.x + (tgt.w >> 1) : tgt.x;
+          const ty = tgt.isBuilding ? tgt.y + (tgt.h >> 1) : tgt.y;
+          u.path = astarNaval(u.x, u.y, tx, ty, false);
+        }
+        if (u.path.length) stepPath(u);
+      }
+      break;
+    }
+  }
+}
+
 // ── Air unit logic ────────────────────────────────────────────────────────────
 
 function updateAirUnit(u) {
   if (u.hitFlash > 0) u.hitFlash--;
+  if (u.grounded > 0) u.grounded--;
   switch (u.state) {
     case 'idle':
       autoAttack(u);
@@ -356,8 +542,9 @@ function stepPath(u) {
       // Stagger re-path by unit id so adjacent units don't oscillate in sync
       if ((state.tick + (u.id % 13)) % 15 === 0) {
         const dest = u.path[u.path.length - 1];
-        const np = astar(u.x, u.y, dest.x, dest.y, false);
-        u.path = np.length ? np : astar(u.x, u.y, dest.x, dest.y, true);
+        const pfn = u.armorType === 'naval' ? astarNaval : astar;
+        const np = pfn(u.x, u.y, dest.x, dest.y, false);
+        u.path = np.length ? np : pfn(u.x, u.y, dest.x, dest.y, true);
         u.mprog = 0;
       }
       return;
@@ -365,6 +552,7 @@ function stepPath(u) {
   } else {
     u.blockWait = 0;
   }
+  if (u.armorType === 'naval') u.facing = Math.atan2(next.y - u.y, next.x - u.x);
   u.mprog += u.speed / TS;
   if (u.mprog >= 1) {
     u.x = next.x; u.y = next.y;

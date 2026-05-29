@@ -22,51 +22,65 @@ export const FBONUSES = Object.freeze([
 
 // ARMOR_MULT[weaponType][armorType] = damage multiplier
 export const ARMOR_MULT = Object.freeze({
-  small_arms: { infantry: 1.0,  light: 0.35, heavy: 0.1,  building: 0.05, air: 0.0  },
-  rockets:    { infantry: 0.3,  light: 0.8,  heavy: 1.5,  building: 0.7,  air: 0.25 },
-  cannon:     { infantry: 0.25, light: 0.8,  heavy: 1.0,  building: 0.75, air: 0.0  },
-  gun:        { infantry: 0.9,  light: 0.7,  heavy: 0.5,  building: 0.3,  air: 0.05 },
-  machinegun: { infantry: 1.0,  light: 0.4,  heavy: 0.05, building: 0.03, air: 0.1  },
-  strafe:     { infantry: 0.8,  light: 0.6,  heavy: 0.2,  building: 0.1,  air: 0.5  },
-  bombs:      { infantry: 0.5,  light: 0.8,  heavy: 0.9,  building: 1.1,  air: 0.0  },
-  flak:       { infantry: 0.6,  light: 0.3,  heavy: 0.1,  building: 0.0,  air: 2.5  },
+  small_arms: { infantry: 1.0,  light: 0.35, heavy: 0.1,  building: 0.05, air: 0.0,  naval: 0.05 },
+  rockets:    { infantry: 0.3,  light: 0.8,  heavy: 1.5,  building: 0.7,  air: 0.25, naval: 0.9  },
+  cannon:     { infantry: 0.25, light: 0.8,  heavy: 1.0,  building: 0.75, air: 0.0,  naval: 1.1  },
+  gun:        { infantry: 0.9,  light: 0.7,  heavy: 0.5,  building: 0.3,  air: 0.05, naval: 0.3  },
+  machinegun: { infantry: 1.0,  light: 0.4,  heavy: 0.05, building: 0.03, air: 0.1,  naval: 0.04 },
+  strafe:     { infantry: 0.8,  light: 0.6,  heavy: 0.2,  building: 0.1,  air: 0.5,  naval: 0.1  },
+  bombs:      { infantry: 0.5,  light: 0.8,  heavy: 0.9,  building: 1.1,  air: 0.0,  naval: 0.8  },
+  flak:       { infantry: 0.6,  light: 0.3,  heavy: 0.1,  building: 0.0,  air: 2.5,  naval: 0.0  },
+  torpedo:    { infantry: 0.0,  light: 0.1,  heavy: 0.15, building: 0.4,  air: 0.0,  naval: 2.5  },
 });
 
 export const BDEF = Object.freeze({
-  command:  { name: 'Command Ctr',   w: 3, h: 3, cost: 0,    power: -2, hp: 1200, btime: 0,  prereq: null,        armor: 'building', weapon: null,   desc: 'Main base' },
-  power:    { name: 'Power Plant',   w: 2, h: 2, cost: 300,  power:  5, hp: 350,  btime: 8,  prereq: 'command',   armor: 'building', weapon: null,   desc: '+5 power' },
-  refinery: { name: 'Refinery',      w: 3, h: 2, cost: 700,  power: -1, hp: 600,  btime: 12, prereq: 'command',   armor: 'building', weapon: null,   desc: 'Ore · spawns Harvester' },
-  barracks: { name: 'Barracks',      w: 2, h: 2, cost: 400,  power: -1, hp: 500,  btime: 10, prereq: 'power',     armor: 'building', weapon: null,   desc: 'Trains infantry' },
-  factory:  { name: 'War Factory',   w: 3, h: 2, cost: 700,  power: -2, hp: 700,  btime: 16, prereq: 'power',     armor: 'building', weapon: null,   desc: 'Trains vehicles' },
-  depot:    { name: 'Service Depot', w: 3, h: 2, cost: 600,  power: -1, hp: 450,  btime: 14, prereq: 'factory',   armor: 'building', weapon: null,   desc: 'Repairs vehicles · unlocks MCV' },
-  radar:    { name: 'Radar',         w: 2, h: 2, cost: 500,  power: -2, hp: 300,  btime: 12, prereq: 'refinery',  armor: 'building', weapon: null,   desc: 'Minimap · unlocks air tier' },
-  airfield: { name: 'Airfield',      w: 3, h: 2, cost: 800,  power: -2, hp: 400,  btime: 18, prereq: 'radar',     armor: 'building', weapon: null,   desc: 'Trains aircraft' },
-  turret:   { name: 'Turret',        w: 1, h: 1, cost: 350,  power: -1, hp: 280,  btime: 8,  prereq: 'barracks',  armor: 'building', weapon: 'gun',  desc: 'Defense gun',  range: 6, dmg: 18, aspd: 55 },
-  antiair:  { name: 'Anti-Air',      w: 1, h: 1, cost: 400,  power: -1, hp: 250,  btime: 8,  prereq: 'radar',     armor: 'building', weapon: 'flak', desc: 'Air defense',  range: 8, dmg: 30, aspd: 60 },
+  command:   { name: 'Command Ctr',   w: 3, h: 3, cost: 0,    power: -2, hp: 1200, btime: 0,  prereq: null,        armor: 'building', weapon: null,      desc: 'Main base' },
+  power:     { name: 'Power Plant',   w: 2, h: 2, cost: 300,  power:  5, hp: 350,  btime: 8,  prereq: 'command',   armor: 'building', weapon: null,      desc: '+5 power' },
+  refinery:  { name: 'Refinery',      w: 3, h: 2, cost: 1100, power: -1, hp: 700,  btime: 12, prereq: 'command',   armor: 'building', weapon: null,      desc: 'Ore · spawns Harvester' },
+  barracks:  { name: 'Barracks',      w: 2, h: 2, cost: 500,  power: -1, hp: 500,  btime: 10, prereq: 'power',     armor: 'building', weapon: null,      desc: 'Trains infantry' },
+  factory:   { name: 'War Factory',   w: 3, h: 2, cost: 800,  power: -2, hp: 700,  btime: 16, prereq: 'power',     armor: 'building', weapon: null,      desc: 'Trains vehicles' },
+  depot:     { name: 'Service Depot', w: 3, h: 2, cost: 600,  power: -1, hp: 450,  btime: 14, prereq: 'factory',   armor: 'building', weapon: null,      desc: 'Repairs vehicles · unlocks MCV' },
+  radar:     { name: 'Radar',         w: 2, h: 2, cost: 500,  power: -2, hp: 300,  btime: 12, prereq: 'refinery',  armor: 'building', weapon: null,      desc: 'Minimap · unlocks air tier' },
+  airfield:  { name: 'Airfield',      w: 3, h: 2, cost: 1000, power: -2, hp: 500,  btime: 18, prereq: 'radar',     armor: 'building', weapon: null,      desc: 'Trains aircraft' },
+  navalyard: { name: 'Naval Yard',    w: 3, h: 2, cost: 1000, power: -2, hp: 650,  btime: 16, prereq: 'radar',     armor: 'building', weapon: null,      desc: 'Trains naval units', water: true },
+  turret:    { name: 'Turret',        w: 1, h: 1, cost: 400,  power: -1, hp: 300,  btime: 8,  prereq: 'barracks',  armor: 'building', weapon: 'gun',     desc: 'Defense gun',  range: 7, dmg: 22, aspd: 55 },
+  antiair:   { name: 'Anti-Air',      w: 1, h: 1, cost: 450,  power: -1, hp: 300,  btime: 8,  prereq: 'radar',     armor: 'building', weapon: 'flak',    desc: 'Air defense',  range: 8, dmg: 30, aspd: 60 },
 });
 
 export const UDEF = Object.freeze({
-  harvester: { name: 'Harvester', cost: 800,  hp: 200, speed: 1.4, dmg: 0,  range: 0, aspd: 0,   ttime: 14, desc: 'Collects ore',             armor: 'light',    weapon: null },
-  rifleman:  { name: 'Rifleman',  cost: 200,  hp: 80,  speed: 2.2, dmg: 14, range: 5, aspd: 50,  ttime: 6,  desc: 'Anti-infantry',             armor: 'infantry', weapon: 'small_arms' },
-  rocketeer: { name: 'Rocketeer', cost: 350,  hp: 60,  speed: 1.9, dmg: 28, range: 6, aspd: 90,  ttime: 9,  desc: 'Anti-armor',                armor: 'infantry', weapon: 'rockets' },
-  scout:     { name: 'Scout',     cost: 480,  hp: 90,  speed: 2.3, dmg: 22, range: 5, aspd: 38,  ttime: 10, desc: 'Fast anti-infantry',        armor: 'light',    weapon: 'machinegun' },
-  aatrack:   { name: 'AA Track',  cost: 520,  hp: 130, speed: 2.1, dmg: 25, range: 7, aspd: 50,  ttime: 12, desc: 'Mobile air defense',        armor: 'light',    weapon: 'flak',       prereq: 'radar' },
-  tank:      { name: 'Tank',      cost: 650,  hp: 320, speed: 1.6, dmg: 35, range: 5, aspd: 85,  ttime: 15, desc: 'Heavy armor',               armor: 'heavy',    weapon: 'cannon' },
-  mcv:       { name: 'MCV',       cost: 1200, hp: 300, speed: 1.1, dmg: 0,  range: 0, aspd: 0,   ttime: 25, desc: 'Deploys as Command Center', armor: 'heavy',    weapon: null,         prereq: 'depot' },
-  artillery: { name: 'Artillery', cost: 900,  hp: 120, speed: 0.85, dmg: 55, range: 11, aspd: 120, ttime: 20, desc: 'Long-range siege',         armor: 'light',    weapon: 'cannon',     splash: 1.5, prereq: 'radar', factionOnly: 0 },
-  v2rocket:  { name: 'V2 Rocket', cost: 900,  hp: 120, speed: 0.80, dmg: 58, range: 11, aspd: 130, ttime: 22, desc: 'Rocket artillery',         armor: 'light',    weapon: 'rockets',    splash: 1.5, prereq: 'radar', factionOnly: 1 },
-  tomahawk:  { name: 'Tomahawk',  cost: 850,  hp: 100, speed: 0.90, dmg: 48, range: 11, aspd: 110, ttime: 18, desc: 'Precision missiles',       armor: 'light',    weapon: 'rockets',    splash: 1.5, prereq: 'radar', factionOnly: 2 },
-  fighter:   { name: 'Fighter',   cost: 800,  hp: 80,  speed: 3.2, dmg: 22, range: 5, aspd: 40,  ttime: 18, desc: 'Fast air superiority',      armor: 'air',      weapon: 'strafe',     prereq: 'airfield', factionOnly: 0 },
-  gunship:   { name: 'Gunship',   cost: 950,  hp: 180, speed: 1.6, dmg: 42, range: 5, aspd: 120, ttime: 26, desc: 'Heavy bomber',              armor: 'air',      weapon: 'bombs',      prereq: 'airfield', factionOnly: 1 },
-  drone:     { name: 'Drone',     cost: 600,  hp: 60,  speed: 3.8, dmg: 9,  range: 4, aspd: 35,  ttime: 14, desc: 'Fast attack drone',         armor: 'air',      weapon: 'strafe',     prereq: 'airfield', factionOnly: 2 },
+  harvester:  { name: 'Harvester',  cost: 800,  hp: 350, speed: 1.4,  dmg: 0,  range: 0,  aspd: 0,   ttime: 14, desc: 'Collects ore',              armor: 'light',    weapon: null },
+  rifleman:   { name: 'Rifleman',   cost: 200,  hp: 80,  speed: 2.2,  dmg: 14, range: 5,  aspd: 50,  ttime: 6,  desc: 'Anti-infantry',              armor: 'infantry', weapon: 'small_arms' },
+  rocketeer:  { name: 'Rocketeer',  cost: 350,  hp: 75,  speed: 1.9,  dmg: 28, range: 6,  aspd: 90,  ttime: 9,  desc: 'Anti-armor',                 armor: 'infantry', weapon: 'rockets' },
+  scout:      { name: 'Scout',      cost: 500,  hp: 100, speed: 2.3,  dmg: 22, range: 5,  aspd: 38,  ttime: 10, desc: 'Fast anti-infantry',         armor: 'light',    weapon: 'machinegun' },
+  aatrack:    { name: 'AA Track',   cost: 520,  hp: 130, speed: 2.1,  dmg: 25, range: 7,  aspd: 50,  ttime: 12, desc: 'Mobile air defense',         armor: 'light',    weapon: 'flak',   prereq: 'radar' },
+  tank:       { name: 'Tank',       cost: 750,  hp: 350, speed: 1.6,  dmg: 35, range: 5,  aspd: 85,  ttime: 15, desc: 'Heavy armor',                armor: 'heavy',    weapon: 'cannon' },
+  mcv:        { name: 'MCV',        cost: 1200, hp: 300, speed: 1.1,  dmg: 0,  range: 0,  aspd: 0,   ttime: 25, desc: 'Deploys as Command Center',  armor: 'heavy',    weapon: null,     prereq: 'depot' },
+  artillery:  { name: 'Artillery',  cost: 1000, hp: 130, speed: 0.85, dmg: 55, range: 11, aspd: 120, ttime: 20, desc: 'Long-range siege',           armor: 'light',    weapon: 'cannon', splash: 1.5, prereq: 'radar', factionOnly: 0 },
+  v2rocket:   { name: 'V2 Rocket',  cost: 1000, hp: 130, speed: 0.80, dmg: 58, range: 11, aspd: 130, ttime: 22, desc: 'Rocket artillery',           armor: 'light',    weapon: 'rockets',splash: 1.5, prereq: 'radar', factionOnly: 1 },
+  tomahawk:   { name: 'Tomahawk',   cost: 950,  hp: 110, speed: 0.90, dmg: 48, range: 11, aspd: 110, ttime: 18, desc: 'Precision missiles',         armor: 'light',    weapon: 'rockets',splash: 1.5, prereq: 'radar', factionOnly: 2 },
+  engineer:   { name: 'Engineer',   cost: 600,  hp: 80,  speed: 1.8,  dmg: 0,  range: 0,  aspd: 0,   ttime: 10, desc: 'Captures or repairs buildings',      armor: 'infantry', weapon: null },
+  medic:      { name: 'Medic',      cost: 350,  hp: 70,  speed: 2.0,  dmg: 0,  range: 3,  aspd: 0,   ttime: 8,  desc: 'Heals nearby friendly infantry',      armor: 'infantry', weapon: null },
+  mechanic:   { name: 'Mechanic',   cost: 450,  hp: 80,  speed: 1.6,  dmg: 0,  range: 4,  aspd: 0,   ttime: 9,  desc: 'Repairs nearby friendly vehicles',     armor: 'infantry', weapon: null },
+  fighter:    { name: 'Fighter',    cost: 850,  hp: 120, speed: 3.2,  dmg: 22, range: 5,  aspd: 40,  ttime: 18, desc: 'Fast air superiority',                 armor: 'air',      weapon: 'strafe', prereq: 'airfield', factionOnly: 0 },
+  gunship:    { name: 'Gunship',    cost: 1100, hp: 180, speed: 1.6,  dmg: 42, range: 5,  aspd: 120, ttime: 26, desc: 'Heavy bomber',                         armor: 'air',      weapon: 'bombs',  prereq: 'airfield', factionOnly: 1 },
+  drone:      { name: 'Drone',      cost: 600,  hp: 60,  speed: 3.8,  dmg: 9,  range: 4,  aspd: 35,  ttime: 14, desc: 'Fast attack drone',                    armor: 'air',      weapon: 'strafe', prereq: 'airfield', factionOnly: 2 },
+  chinook:    { name: 'Chinook',    cost: 950,  hp: 280, speed: 2.4,  dmg: 0,  range: 0,  aspd: 0,   ttime: 20, desc: 'Air transport — carries 5 infantry',   armor: 'air',      weapon: null, capacity: 5, infantryOnly: true, prereq: 'airfield' },
+  cruiser:    { name: 'Cruiser',    cost: 1200, hp: 650, speed: 0.85, dmg: 42, range: 10, aspd: 150, ttime: 26, desc: 'Heavy warship — bombards coast', armor: 'naval', weapon: 'cannon', splash: 0.8, prereq: 'navalyard' },
+  destroyer:  { name: 'Destroyer',  cost: 800,  hp: 380, speed: 2.1,  dmg: 30, range: 6,  aspd: 60,  ttime: 16, desc: 'Fast ASW hunter',            armor: 'naval',    weapon: 'torpedo',splash: 0.3, prereq: 'navalyard' },
+  submarine:  { name: 'Submarine',  cost: 900,  hp: 400, speed: 1.6,  dmg: 48, range: 7,  aspd: 95,  ttime: 19, desc: 'Torpedo ambush vessel',      armor: 'naval',    weapon: 'torpedo',prereq: 'navalyard' },
+  transport:  { name: 'Transport',  cost: 700,  hp: 480, speed: 1.8,  dmg: 0,  range: 0,  aspd: 0,   ttime: 13, desc: 'Unarmed troop carrier',      armor: 'naval',    weapon: null,     capacity: 5, prereq: 'navalyard' },
 });
 
-export const BUILD_TYPES   = ['power', 'refinery', 'barracks', 'factory', 'depot', 'radar', 'airfield'];
+export const BUILD_TYPES   = ['power', 'refinery', 'barracks', 'factory', 'depot', 'radar', 'airfield', 'navalyard'];
 export const DEFENSE_TYPES = ['turret', 'antiair'];
 export const TRAIN_FROM    = Object.freeze({
-  barracks: ['rifleman', 'rocketeer'],
-  factory:  ['harvester', 'scout', 'aatrack', 'tank', 'mcv', 'artillery', 'v2rocket', 'tomahawk'],
-  airfield: ['fighter', 'gunship', 'drone'],
+  barracks:  ['rifleman', 'rocketeer', 'engineer', 'medic', 'mechanic'],
+  factory:   ['harvester', 'scout', 'aatrack', 'tank', 'mcv', 'artillery', 'v2rocket', 'tomahawk'],
+  airfield:  ['fighter', 'gunship', 'drone', 'chinook'],
+  navalyard: ['cruiser', 'destroyer', 'submarine', 'transport'],
 });
 
+export const TRANSPORT_SLOTS = Object.freeze({ infantry: 1, light: 2, heavy: 3 });
+
 export const VEHICLE_TYPES = new Set(['tank', 'harvester', 'mcv', 'scout', 'aatrack', 'artillery', 'v2rocket', 'tomahawk']);
+export const NAVAL_TYPES   = new Set(['cruiser', 'destroyer', 'submarine', 'transport']);

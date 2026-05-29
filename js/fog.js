@@ -5,10 +5,11 @@ const VISION_R = {
   rifleman: 4, rocketeer: 4, harvester: 5,
   scout: 6, aatrack: 5, tank: 5, mcv: 5,
   artillery: 5, v2rocket: 5, tomahawk: 5,
-  fighter: 8, gunship: 6, drone: 8,
+  fighter: 8, gunship: 6, drone: 8, chinook: 5,
   command: 5, power: 3, refinery: 3, barracks: 3,
   factory: 3, depot: 3, radar: 9, airfield: 4,
-  turret: 4, antiair: 5,
+  turret: 4, antiair: 5, navalyard: 4,
+  cruiser: 8, destroyer: 6, submarine: 5, transport: 5,
 };
 
 export function initFog() {

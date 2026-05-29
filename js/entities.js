@@ -71,6 +71,15 @@ export class Unit extends Ent {
     this.facing = 0;
     this.orderQueue = [];
     this.atkMoveDest = null;
+    this.cargo               = [];
+    this.capacity            = d.capacity ?? 0;
+    this.loaded              = false;
+    this.onTransport         = null;
+    this.boardingTarget      = null;
+    this.captureTarget       = null;
+    this.captureProgress     = 0;
+    this.repairBuildingTarget = null;
+    this.grounded            = 0;
   }
 }
 
@@ -97,7 +106,7 @@ export function getEntAt(tx, ty) {
     if (e.dead) continue;
     if (e.isBuilding && tx >= e.x && tx < e.x + e.w && ty >= e.y && ty < e.y + e.h) return e;
     // Air units are drawn elevated above their tile; also match one tile above the entity
-    if (e.isUnit && e.x === tx && (e.y === ty || (e.armorType === 'air' && e.y === ty + 1))) return e;
+    if (e.isUnit && !e.loaded && e.x === tx && (e.y === ty || (e.armorType === 'air' && e.y === ty + 1))) return e;
   }
   return null;
 }

@@ -9,6 +9,8 @@ const PROPS = {
   v2rocket:  { speed: 3.5, r: 3.5, color: '#ff8844' },
   tomahawk:  { speed: 4.5, r: 3.0, color: '#88ddff' },
   gunship:   { speed: 3.0, r: 5.0, color: '#cc8833' },
+  cruiser:   { speed: 1.4, r: 4.0, color: '#ffcc44' },
+  destroyer: { speed: 2.5, r: 3.5, color: '#44bbff' },
 };
 
 export function spawnShell(ox, oy, tx, ty, attacker, dmg, splashRadius) {

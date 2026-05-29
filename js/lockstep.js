@@ -56,6 +56,7 @@ function snapshotEnt(e) {
   s.atkMoveDest = e.atkMoveDest ? { ...e.atkMoveDest }           : null;
   s.patrolA     = e.patrolA     ? { ...e.patrolA }               : null;
   s.patrolB     = e.patrolB     ? { ...e.patrolB }               : null;
+  s.cargo       = e.cargo       ? [...e.cargo]                   : null;
   return s;
 }
 
@@ -111,6 +112,7 @@ function restoreEnt(s) {
   if (s.atkMoveDest) e.atkMoveDest = { ...s.atkMoveDest };
   if (s.patrolA) e.patrolA = { ...s.patrolA };
   if (s.patrolB) e.patrolB = { ...s.patrolB };
+  if (s.cargo) e.cargo = [...s.cargo];
   return e;
 }
 

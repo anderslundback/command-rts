@@ -1,4 +1,4 @@
-import { TS, MW, MH, BDEF, UDEF, FBONUSES, VEHICLE_TYPES } from './constants.js';
+import { TS, MW, MH, BDEF, UDEF, FBONUSES, VEHICLE_TYPES, NAVAL_TYPES } from './constants.js';
 import { state } from './state.js';
 import { getEnt, getEntAt } from './entities.js';
 import { getTile } from './map.js';
@@ -9,6 +9,7 @@ import { nearestRefinery, calcPower } from './resources.js';
 import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderHarvest } from './orders.js';
 import { setMsg, updateBuildPanel, switchTab } from './hud.js';
 import { scheduleInput } from './net/netClient.js';
+import { applyCommand } from './commands.js';
 import { syncFromGameState } from './store.js';
 
 const RED_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cline x1='16' y1='2' x2='16' y2='30' stroke='%23ff2222' stroke-width='2'/%3E%3Cline x1='2' y1='16' x2='30' y2='16' stroke='%23ff2222' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='none' stroke='%23ff2222' stroke-width='2'/%3E%3C/svg%3E") 16 16, crosshair`;
@@ -384,6 +385,15 @@ function onRightClick(ev) {
       state.moveIndicators.push({ wx: (target.x + target.w / 2) * TS, wy: (target.y + target.h / 2) * TS, t: 30 });
       return;
     }
+    // Engineer repairs friendly damaged buildings
+    const engSel = state.selected.map(id => state.entById.get(id))
+      .filter(u => u?.isUnit && u.faction === f && !u.dead && u.type === 'engineer');
+    if (engSel.length && target.done && target.hp < target.maxHp) {
+      const cmd = { action: 'repair_building', ids: engSel.map(u => u.id), buildingId: target.id, queued: ev.shiftKey };
+      if (state.net) scheduleInput(cmd); else applyCommand(cmd);
+      return;
+    }
+
     state.primaryBuilding[target.type] = target.id;
     if (state.net) scheduleInput({ action: 'set_primary', btype: target.type, entId: target.id });
     setMsg(BDEF[target.type].name + ' set as primary', 90);
@@ -418,6 +428,14 @@ function onRightClick(ev) {
   if (!myUnits.length) return;
 
   if (target && target.faction !== f) {
+    // Engineers capture enemy buildings
+    if (target.isBuilding && target.done) {
+      const engineers = myUnits.filter(u => u.type === 'engineer');
+      if (engineers.length) {
+        const cmd = { action: 'capture_building', ids: engineers.map(u => u.id), buildingId: target.id, queued: ev.shiftKey };
+        if (state.net) scheduleInput(cmd); else applyCommand(cmd);
+      }
+    }
     const attackers = myUnits.filter(u => u.dmg > 0);
     if (state.net) {
       if (attackers.length) scheduleInput({ action: 'attack', ids: attackers.map(u => u.id), targetId: target.id, queued: ev.shiftKey });
@@ -430,6 +448,19 @@ function onRightClick(ev) {
       if (harvesters.length) scheduleInput({ action: 'harvest', ids: harvesters.map(u => u.id), refineryId: target.id });
     } else {
       harvesters.forEach(u => orderHarvest(u, target));
+    }
+  } else if (target?.isUnit && target.faction === f && target.capacity > 0 &&
+             (target.type === 'transport' || target.type === 'chinook')) {
+    const isInfantryOnly = UDEF[target.type]?.infantryOnly ?? false;
+    const boardable = myUnits.filter(u =>
+      !NAVAL_TYPES.has(u.type) && u.armorType !== 'air' && u.type !== 'harvester' &&
+      (!isInfantryOnly || u.armorType === 'infantry')
+    );
+    if (boardable.length) {
+      const cmd = { action: 'load_transport', ids: boardable.map(u => u.id), transportId: target.id, queued: ev.shiftKey };
+      if (state.net) scheduleInput(cmd);
+      else applyCommand(cmd);
+      state.moveIndicators.push({ wx: target.px + TS / 2, wy: target.py + TS / 2, t: 30 });
     }
   } else if (getTile(tx, ty) === T.ORE) {
     const harvesters = myUnits.filter(u => u.type === 'harvester');
@@ -577,9 +608,19 @@ function onKey(ev) {
       }
     }
     if (ev.key === 'f' || ev.key === 'F') {
-      const mcv = state.entities.find(e => !e.dead && e.isUnit && e.type === 'mcv' &&
+      const transport = state.entities.find(e => !e.dead && e.isUnit &&
+        (e.type === 'transport' || e.type === 'chinook') &&
+        e.faction === state.playerFaction && e.cargo?.length > 0 && state.selected.includes(e.id));
+      const mcv = !transport && state.entities.find(e => !e.dead && e.isUnit && e.type === 'mcv' &&
         e.faction === state.playerFaction && state.selected.includes(e.id));
-      if (mcv) {
+      if (transport) {
+        if (state.net) {
+          scheduleInput({ action: 'unload_transport', transportId: transport.id });
+        } else {
+          applyCommand({ action: 'unload_transport', transportId: transport.id });
+          syncFromGameState();
+        }
+      } else if (mcv) {
         if (state.net) {
           scheduleInput({ action: 'deploy_mcv', unitId: mcv.id });
         } else {

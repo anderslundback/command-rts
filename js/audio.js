@@ -21,9 +21,11 @@ function _initCache(c) {
     crack:      noise(0.04,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*(1-i/n); }),
     gunship:    noise(0.28,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * Math.max(0, 1 - i/n*1.8); }),
     fighter:    noise(0.12,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * Math.max(0, 1 - i/n*5); }),
-    buildClunk: noise(0.08,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*Math.exp(-i/n*18); }),
-    explosion:  noise(0.60,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*Math.exp(-i/n*4); }),
-    expCrack:   noise(0.05,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*(1-i/n); }),
+    buildClunk:  noise(0.08,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*Math.exp(-i/n*18); }),
+    explosion:   noise(0.60,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*Math.exp(-i/n*4); }),
+    expCrack:    noise(0.05,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*(1-i/n); }),
+    cruiserFire: noise(0.55,  (d, n) => { for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1)*Math.exp(-i/n*1.8)*(1-i/n*0.3); }),
+    torpedo:     noise(0.45,  (d, n) => { for (let i = 0; i < n; i++) { const t=i/n; d[i]=(Math.random()*2-1)*Math.exp(-t*2.2)*(0.4+0.6*(1-t)); } }),
   };
 }
 
@@ -104,6 +106,30 @@ export function playShot(type) {
       _play(c, _cache.gunship, 'lowpass', 280, null, 0.65);
     } else if (type === 'fighter' || type === 'drone' || type === 'scout') {
       _play(c, _cache.fighter, 'bandpass', 2000, 0.7, 0.32);
+    } else if (type === 'cruiser') {
+      // Heavy naval cannon: deep low boom with concussion thud
+      _play(c, _cache.cruiserFire, 'lowpass', 90, null, 0.9);
+      const now = c.currentTime;
+      const osc = c.createOscillator();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(55, now);
+      osc.frequency.exponentialRampToValueAtTime(18, now + 0.4);
+      const og = c.createGain();
+      og.gain.setValueAtTime(0.55, now); og.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc.connect(og); og.connect(_master);
+      osc.start(now); osc.stop(now + 0.5);
+      osc.onended = () => { osc.disconnect(); og.disconnect(); };
+    } else if (type === 'destroyer' || type === 'submarine') {
+      // Torpedo launch: low underwater whoosh + pressured hiss
+      _play(c, _cache.torpedo, 'lowpass', 320, null, 0.7);
+      const now = c.currentTime;
+      const osc = c.createOscillator();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(40, now + 0.35);
+      const og = c.createGain();
+      og.gain.setValueAtTime(0.3, now); og.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc.connect(og); og.connect(_master);
+      osc.start(now); osc.stop(now + 0.45);
+      osc.onended = () => { osc.disconnect(); og.disconnect(); };
     }
   } catch (_) {}
 }

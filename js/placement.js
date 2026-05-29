@@ -1,6 +1,6 @@
 import { BDEF, UDEF, FBONUSES, TS } from './constants.js';
 import { state } from './state.js';
-import { getTile, passable } from './map.js';
+import { getTile, passable, passableNaval } from './map.js';
 import { T } from './constants.js';
 import { Building, Unit, addEnt } from './entities.js';
 import { calcPower } from './resources.js';
@@ -8,9 +8,10 @@ import { calcPower } from './resources.js';
 export function canPlace(type, tx, ty, faction = -1, skipAdjacency = false) {
   const d = BDEF[type];
   if (tx < 0 || ty < 0 || tx + d.w > 80 || ty + d.h > 60) return false;
+  const requiredTile = d.water ? T.WATER : T.GRASS;
   for (let dy = 0; dy < d.h; dy++)
     for (let dx = 0; dx < d.w; dx++)
-      if (getTile(tx + dx, ty + dy) !== T.GRASS) return false;
+      if (getTile(tx + dx, ty + dy) !== requiredTile) return false;
   for (const e of state.entities) {
     if (e.dead || !e.isBuilding) continue;
     if (tx < e.x + e.w && tx + d.w > e.x && ty < e.y + e.h && ty + d.h > e.y) return false;
@@ -95,6 +96,33 @@ export function deployMcvInPlace(mcv) {
     }
   }
   return null;
+}
+
+export function spawnNearNaval(f, type, building) {
+  for (let i = -1; i <= building.w; i++) {
+    for (const pos of [
+      { x: building.x + i, y: building.y - 1 },
+      { x: building.x + i, y: building.y + building.h },
+    ]) {
+      if (trySpawnNaval(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
+    }
+  }
+  for (let i = 0; i < building.h; i++) {
+    for (const pos of [
+      { x: building.x - 1, y: building.y + i },
+      { x: building.x + building.w, y: building.y + i },
+    ]) {
+      if (trySpawnNaval(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
+    }
+  }
+  return null;
+}
+
+function trySpawnNaval(f, type, x, y) {
+  if (!passableNaval(x, y)) return false;
+  if (state.entities.some(e => !e.dead && e.isUnit && e.x === x && e.y === y)) return false;
+  spawnUnit(f, type, x, y);
+  return true;
 }
 
 function trySpawn(f, type, x, y) {

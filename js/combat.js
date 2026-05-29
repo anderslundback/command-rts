@@ -7,7 +7,8 @@ import { distToEnt } from './pathfinding.js';
 export function dealDmg(e, dmg, attacker) {
   let actualDmg = dmg;
   if (attacker?.weaponType && e.armorType) {
-    const mult = ARMOR_MULT[attacker.weaponType]?.[e.armorType] ?? 1.0;
+    const effectiveArmor = (e.type === 'chinook' && e.grounded > 0) ? 'light' : e.armorType;
+    const mult = ARMOR_MULT[attacker.weaponType]?.[effectiveArmor] ?? 1.0;
     actualDmg = Math.max(1, Math.round(dmg * mult));
   }
   e.hp -= actualDmg;
@@ -58,7 +59,7 @@ export function dealDmg(e, dmg, attacker) {
 export function dealSplash(cx, cy, baseDmg, radiusPx, attacker) {
   const rSq = radiusPx * radiusPx;
   for (const e of state.entities) {
-    if (e.dead || e.faction === attacker.faction) continue;
+    if (e.dead || e.loaded) continue;
     const ex = e.isBuilding ? (e.x + e.w / 2) * TS : e.px + TS / 2;
     const ey = e.isBuilding ? (e.y + e.h / 2) * TS : e.py + TS / 2;
     const dx = ex - cx, dy = ey - cy;
@@ -70,7 +71,7 @@ export function autoAttack(u) {
   if (!u.dmg) return;
   let nearest = null, nd = u.range + 0.1;
   for (const e of state.entities) {
-    if (e.dead || e.faction === u.faction) continue;
+    if (e.dead || e.loaded || e.faction === u.faction) continue;
     const d = distToEnt(u, e);
     if (d < nd) { nd = d; nearest = e; }
   }

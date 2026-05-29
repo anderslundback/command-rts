@@ -46,6 +46,8 @@ export interface EntUI {
   trainQ: TrainItemUI[];
   waypoint: { tx: number; ty: number } | null;
   repairing: boolean;
+  cargoCount: number;
+  cargoCapacity: number;
 }
 
 // ── Multiplayer types ────────────────────────────────────────────────────────
@@ -251,6 +253,8 @@ export function syncFromGameState(): void {
       trainQ: [], // BuildPanel reads from trainQueues; duplicating here is wasted work
       waypoint: e.waypoint ? { ...e.waypoint } : null,
       repairing: !!e.repairing,
+      cargoCount: e.cargo?.length ?? 0,
+      cargoCapacity: e.capacity ?? 0,
     }));
 
   // Serialize training queues across all player buildings

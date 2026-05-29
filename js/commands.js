@@ -1,9 +1,11 @@
-import { BDEF, UDEF, FBONUSES } from './constants.js';
+import { BDEF, UDEF, FBONUSES, TS, MW, MH, T, TRANSPORT_SLOTS } from './constants.js';
+import { adjTile } from './pathfinding.js';
 import { state } from './state.js';
 import { orderMove, orderAttack, orderAttackMove, orderPatrol, orderStop, orderHarvest } from './orders.js';
 import { placeBuilding, deployMcvInPlace, spawnNear } from './placement.js';
 import { calcPower } from './resources.js';
 import { playTrainingStart, playCancel, playBuildStart } from './audio.js';
+import { getTile } from './map.js';
 
 export function applyCommand(cmd) {
   switch (cmd.action) {
@@ -112,6 +114,76 @@ export function applyCommand(cmd) {
       for (const id of cmd.ids) { const u = state.entById.get(id); if (u && t && !u.dead) orderAttack(u, t, cmd.queued); }
       break;
     }
+    case 'load_transport': {
+      const transport = state.entById.get(cmd.transportId);
+      if (!transport || transport.dead || !transport.capacity) break;
+      const isInfantryOnly = UDEF[transport.type]?.infantryOnly ?? false;
+      const adjLand = transport.armorType === 'air' ? _adjLandTiles(transport, 4) : _adjLandTiles(transport, 1);
+      if (transport.armorType !== 'air' && adjLand.length === 0) break;
+      let tileIdx = 0;
+      for (const id of cmd.ids) {
+        const u = state.entById.get(id);
+        if (!u || u.dead || u.loaded) continue;
+        if (isInfantryOnly && u.armorType !== 'infantry') continue;
+        const used = transport.cargo.reduce((s, uid) => { const cu = state.entById.get(uid); return s + (cu ? (TRANSPORT_SLOTS[cu.armorType] ?? 1) : 0); }, 0);
+        const need = TRANSPORT_SLOTS[u.armorType] ?? 1;
+        if (used + need > transport.capacity) continue;
+        if (transport.armorType === 'air') {
+          // Infantry walks to chinook tile
+          u.boardingTarget = cmd.transportId;
+          orderMove(u, transport.x, transport.y, cmd.queued ?? false);
+        } else {
+          const tile = adjLand[tileIdx % Math.max(1, adjLand.length)];
+          if (!tile) continue;
+          tileIdx++;
+          u.boardingTarget = cmd.transportId;
+          orderMove(u, tile.x, tile.y, cmd.queued ?? false);
+        }
+      }
+      break;
+    }
+    case 'capture_building': {
+      const b = state.entById.get(cmd.buildingId);
+      if (!b || b.dead) break;
+      for (const id of cmd.ids) {
+        const u = state.entById.get(id);
+        if (!u || u.dead || u.type !== 'engineer') continue;
+        u.captureTarget = cmd.buildingId;
+        u.captureProgress = 0;
+        const dest = adjTile(b, u.x, u.y) ?? { x: b.x - 1, y: b.y };
+        orderMove(u, dest.x, dest.y, cmd.queued ?? false);
+      }
+      break;
+    }
+    case 'repair_building': {
+      const b = state.entById.get(cmd.buildingId);
+      if (!b || b.dead) break;
+      for (const id of cmd.ids) {
+        const u = state.entById.get(id);
+        if (!u || u.dead || u.type !== 'engineer') continue;
+        u.repairBuildingTarget = cmd.buildingId;
+        const dest = adjTile(b, u.x, u.y) ?? { x: b.x - 1, y: b.y };
+        orderMove(u, dest.x, dest.y, cmd.queued ?? false);
+      }
+      break;
+    }
+    case 'unload_transport': {
+      const transport = state.entById.get(cmd.transportId);
+      if (!transport || transport.dead) break;
+      const adjLand = _adjLandTiles(transport, 1);
+      if (adjLand.length === 0) break;
+      transport.cargo.forEach((uid, i) => {
+        const u = state.entById.get(uid);
+        if (!u) return;
+        u.loaded = false; u.onTransport = null;
+        const tile = adjLand[i % Math.max(1, adjLand.length)];
+        if (tile) { u.x = tile.x; u.y = tile.y; u.px = tile.x * TS; u.py = tile.y * TS; }
+        u.state = 'idle'; u.path = [];
+      });
+      transport.cargo = [];
+      if (transport.type === 'chinook') transport.grounded = 100;
+      break;
+    }
     case 'set_speed':
       state.gameSpeed = Math.max(0, Math.min(4, cmd.speed));
       break;
@@ -129,4 +201,17 @@ export function applyCommand(cmd) {
       break;
     }
   }
+}
+
+function _adjLandTiles(e, radius = 2) {
+  const tiles = [];
+  for (let dy = -radius; dy <= radius; dy++)
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const tx = e.x + dx, ty = e.y + dy;
+      if (tx < 0 || ty < 0 || tx >= MW || ty >= MH) continue;
+      const t = getTile(tx, ty);
+      if (t !== T.WATER && t !== T.ROCK) tiles.push({ x: tx, y: ty });
+    }
+  return tiles;
 }

@@ -81,8 +81,9 @@ function drawBuilding(ctx, e, bx, by, bw, bh, fd, isSel, flash, tick) {
     case 'depot':    bldDepot(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick); break;
     case 'radar':    bldRadar(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick); break;
     case 'airfield': bldAirfield(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick); break;
-    case 'turret':   bldTurret(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick); break;
-    case 'antiair':  bldAntiAir(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick); break;
+    case 'navalyard': bldNavalyard(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick); break;
+    case 'turret':    bldTurret(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick); break;
+    case 'antiair':   bldAntiAir(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick); break;
     default:
       ctx.fillStyle = bd; ctx.fillRect(bx, by, bw, bh);
       ctx.strokeStyle = isSel ? '#fff' : bc; ctx.lineWidth = isSel ? 2 : 1.5;
@@ -539,6 +540,52 @@ function bldAirfield(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick) {
   ctx.beginPath();
   ctx.moveTo(bx + 10, by + 14); ctx.lineTo(bx + 18, by + 14); ctx.lineTo(bx + 10, by + 18);
   ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = isSel ? '#fff' : bc; ctx.lineWidth = isSel ? 2.5 : 1.5;
+  ctx.strokeRect(bx + 0.75, by + 0.75, bw - 1.5, bh - 1.5);
+}
+
+// Naval Yard — 3×2 (96×64) — sits on water
+function bldNavalyard(ctx, e, bx, by, bw, bh, fd, bc, bd, isSel, tick) {
+  const cx = bx + bw / 2, cy = by + bh / 2;
+  // Floating platform / dock surface
+  ctx.fillStyle = '#1a2a35'; ctx.fillRect(bx, by, bw, bh);
+  // Animated water ripple under dock edges
+  const rA = 0.06 + 0.04 * Math.sin(tick * 0.07);
+  ctx.fillStyle = `rgba(80,160,220,${rA})`;
+  ctx.fillRect(bx, by, bw, 4);
+  ctx.fillRect(bx, by + bh - 4, bw, 4);
+  // Dock planks (horizontal strips)
+  ctx.fillStyle = '#253a48';
+  for (let i = 0; i < 3; i++) ctx.fillRect(bx + 4, by + 6 + i * 18, bw - 8, 14);
+  ctx.strokeStyle = '#344e60'; ctx.lineWidth = 0.75; ctx.globalAlpha = 0.5;
+  for (let i = 0; i < 3; i++) ctx.strokeRect(bx + 4.5, by + 6.5 + i * 18, bw - 9, 13);
+  ctx.globalAlpha = 1;
+  // Crane / gantry spanning center
+  const gantryY = by + 8;
+  ctx.fillStyle = bd;
+  ctx.fillRect(bx + 10, gantryY - 14, 6, 18);
+  ctx.fillRect(bx + bw - 16, gantryY - 14, 6, 18);
+  ctx.strokeStyle = bc; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(bx + 10, gantryY - 12); ctx.lineTo(bx + bw - 10, gantryY - 12); ctx.stroke();
+  // Hanging crane hook (animated vertical bob)
+  const hookY = gantryY - 12 + 6 + Math.sin(tick * 0.06) * 3;
+  ctx.beginPath(); ctx.moveTo(cx, gantryY - 12); ctx.lineTo(cx, hookY); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx + 4, hookY + 2, 3, 0, Math.PI); ctx.stroke();
+  // Dry dock bay (center opening to water)
+  ctx.fillStyle = 'rgba(14,34,53,0.85)'; ctx.fillRect(bx + 22, by + 18, 52, bh - 26);
+  ctx.strokeStyle = bc; ctx.lineWidth = 2;
+  ctx.strokeRect(bx + 22, by + 18, 52, bh - 26);
+  // Training progress bar already drawn by renderBuildings outer code
+  // Warning light on gantry
+  ctx.fillStyle = tick % 30 < 15 ? '#ff9900' : 'rgba(80,35,0,0.6)';
+  ctx.beginPath(); ctx.arc(cx, gantryY - 16, 3, 0, Math.PI * 2); ctx.fill();
+  // Bollards on dock edge
+  ctx.fillStyle = bc; ctx.globalAlpha = 0.55;
+  for (const bx2 of [bx + 8, bx + bw - 8]) {
+    ctx.beginPath(); ctx.arc(bx2, by + bh - 8, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx2, by + 12, 3, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.globalAlpha = 1;
   ctx.strokeStyle = isSel ? '#fff' : bc; ctx.lineWidth = isSel ? 2.5 : 1.5;
   ctx.strokeRect(bx + 0.75, by + 0.75, bw - 1.5, bh - 1.5);

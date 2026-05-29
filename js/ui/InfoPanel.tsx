@@ -197,6 +197,34 @@ function EntityDetail({
               {e.weaponType ? ` · ${WEAPON_NAMES[e.weaponType] ?? e.weaponType}` : ''}
             </div>
           )}
+          {e.cargoCapacity > 0 && (
+            <div style={{ fontSize: 10, marginTop: 2 }}>
+              Troops: <span style={{ color: e.cargoCount > 0 ? '#4af' : '#445' }}>{e.cargoCount}</span>
+              <span style={{ color: '#445' }}>/{e.cargoCapacity}</span>
+            </div>
+          )}
+          {e.cargoCapacity > 0 && e.cargoCount > 0 && e.faction === playerFaction && (
+            <button
+              onClick={(ev) => {
+                ev.stopPropagation();
+                if (state.net) {
+                  // @ts-ignore
+                  import('../net/netClient.js').then((m: any) => m.scheduleInput({ action: 'unload_transport', transportId: e.id })).catch(() => {});
+                } else {
+                  // @ts-ignore
+                  import('../commands.js').then((m: any) => {
+                    m.applyCommand({ action: 'unload_transport', transportId: e.id });
+                    // @ts-ignore
+                    import('../store.js').then((s: any) => s.syncFromGameState()).catch(() => {});
+                  }).catch(() => {});
+                }
+              }}
+              className="build-btn"
+              style={{ marginTop: 6, width: '100%', color: '#4af', borderColor: '#2a4a6a' }}
+            >
+              UNLOAD [F]
+            </button>
+          )}
           {e.type === 'mcv' && e.faction === playerFaction && (
             <button
               onClick={handleDeploy}

@@ -1,9 +1,11 @@
 import { state } from './state.js';
-import { astar } from './pathfinding.js';
+import { astar, astarNaval } from './pathfinding.js';
 import { nearestOre } from './map.js';
 import { nearestRefinery } from './resources.js';
 
 import { TS } from './constants.js';
+
+function _pf(u) { return u.armorType === 'naval' ? astarNaval : astar; }
 
 export function orderMove(u, tx, ty, queued = false) {
   if (queued) {
@@ -21,7 +23,7 @@ export function orderMove(u, tx, ty, queued = false) {
   }
   u.state = 'move';
   u.target = null;
-  u.path = astar(u.x, u.y, tx, ty, false);
+  u.path = _pf(u)(u.x, u.y, tx, ty, false);
   u.mprog = 0;
 }
 
@@ -52,7 +54,7 @@ export function orderAttackMove(u, tx, ty, queued = false) {
   } else {
     u.state = 'attack_move';
     u.target = null;
-    u.path = astar(u.x, u.y, tx, ty, false);
+    u.path = _pf(u)(u.x, u.y, tx, ty, false);
     u.mprog = 0;
   }
 }
@@ -81,7 +83,7 @@ export function orderPatrol(u, tx, ty, queued = false) {
   u.patrolA = { tx: u.x, ty: u.y };
   u.patrolB = { tx, ty };
   u.state = 'patrol';
-  u.path = astar(u.x, u.y, tx, ty, false);
+  u.path = _pf(u)(u.x, u.y, tx, ty, false);
   u.mprog = 0;
 }
 
