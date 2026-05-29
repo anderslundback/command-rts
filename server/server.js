@@ -354,7 +354,7 @@ wss.on('connection', ws => {
             // Find which components diverged
             const debugEntries = slots.map(s => tickHashes[s].debug).filter(Boolean);
             const diverged = debugEntries.length >= 2
-              ? ['entityH', 'creditsH', 'rngH', 'shellH', 'mapH', 'entN0', 'entN1', 'entN2', 'hpH', 'posH', 'oreH', 'bprogH'].filter(
+              ? ['entityH', 'creditsH', 'rngH', 'shellH', 'mapH', 'entN0', 'entN1', 'entN2', 'hpH', 'posH', 'oreH', 'bprogH', 'facH'].filter(
                   k => !debugEntries.every(d => d[k] === debugEntries[0][k])
                 )
               : [];

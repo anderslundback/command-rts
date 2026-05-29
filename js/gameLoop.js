@@ -14,6 +14,7 @@ import { syncFromGameState } from './store.js';
 import { net } from './net/netClient.js';
 import { applyCommand } from './commands.js';
 import { storeTickSnapshot, entityHash, mapHash } from './lockstep.js';
+import { rebuildGrid } from './spatial.js';
 
 // Indices 0-4 are the standard in-game speeds.
 // Indices 5-6 (2× and 4×) are replay-only — setGameSpeed enforces this.
@@ -53,8 +54,11 @@ export function loop() {
   _lastLoopTime = now;
 
   updateParticles();
-  let _di = state.damageNumbers.length;
-  while (_di--) { const d = state.damageNumbers[_di]; d.age++; d.y -= 0.4; if (d.age >= 50) state.damageNumbers.splice(_di, 1); }
+  const _dn = state.damageNumbers;
+  for (let _di = _dn.length - 1; _di >= 0; _di--) {
+    const d = _dn[_di]; d.age++; d.y -= 0.4;
+    if (d.age >= 50) { _dn[_di] = _dn[_dn.length - 1]; _dn.pop(); }
+  }
   if (state.gameStarted && state._dirty) { syncFromGameState(); state._dirty = false; }
 
   const tickMsAlpha = TICK_MS_TABLE[state.gameSpeed ?? 2];
@@ -204,16 +208,33 @@ function gameTick() {
   }
 
   if (!state.gameOver) {
-    // Rebuild building-type count cache once per tick — used by buildings.js for trainQ speedMult.
-    // Cheaper than buildings.js filtering all entities for each active trainQ entry.
+    // Rebuild per-tick derived caches in a single entity pass (NOT snapshotted — rebuilt each tick):
+    //   _bldgCounts  — building-type counts for buildings.js trainQ speedMult
+    //   factionCache — per-faction unit/building sublists, replacing repeated filter() scans in ai.js etc.
+    // Lists are built in state.entities order so any order-dependent consumer stays deterministic.
     const bc = state._bldgCounts ?? (state._bldgCounts = new Map());
     bc.clear();
+    const fcache = state.factionCache ?? (state.factionCache = [
+      { units: [], buildings: [], doneBuildings: [] },
+      { units: [], buildings: [], doneBuildings: [] },
+      { units: [], buildings: [], doneBuildings: [] },
+    ]);
+    for (const fc of fcache) { fc.units.length = 0; fc.buildings.length = 0; fc.doneBuildings.length = 0; }
     for (const e of state.entities) {
-      if (!e.dead && e.isBuilding && e.done) {
-        const k = `${e.faction}:${e.type}`;
-        bc.set(k, (bc.get(k) ?? 0) + 1);
+      if (e.dead) continue;
+      const fc = fcache[e.faction];
+      if (e.isUnit) {
+        if (fc) fc.units.push(e);
+      } else if (e.isBuilding) {
+        if (fc) fc.buildings.push(e);
+        if (e.done) {
+          if (fc) fc.doneBuildings.push(e);
+          const k = `${e.faction}:${e.type}`;
+          bc.set(k, (bc.get(k) ?? 0) + 1);
+        }
       }
     }
+    rebuildGrid();
 
     for (const e of state.entities) {
       if (e.dead) continue;
@@ -250,12 +271,12 @@ function gameTick() {
     // Per-faction entity hash (client debug panel only)
     const entH = [0, 0, 0];
     // Per-field sub-hashes — tell us WHICH field is diverging without needing the full log
-    let hpH = 0, posH = 0, oreH = 0, bprogH = 0;
+    let hpH = 0, posH = 0, oreH = 0, bprogH = 0, facH = 0;
     for (const e of state.entities) {
       if (e.dead) continue;
       const f = e.faction;
       entN[f]++;
-      entH[f] ^= (e.id * 73856093) ^ ((e.hp | 0) * 19349663) ^ (Math.round(e.px) * 83492791) ^ (Math.round(e.py) * 95452411);
+      entH[f] ^= (e.id * 73856093) ^ ((e.hp | 0) * 19349663) ^ (Math.round(e.px) * 83492791) ^ (Math.round(e.py) * 95452411) ^ (e.faction * 2654435761);
       if (e.ore) entH[f] ^= (e.ore * 4256233) >>> 0;
       entH[f] = ((entH[f] ^ (entH[f] >>> 13)) * 1540483477) >>> 0;
       // Sub-hashes (mixed separately so a single diverging field lights up exactly one)
@@ -263,11 +284,12 @@ function gameTick() {
       posH ^= ((e.id * 83492791) ^ (Math.round(e.px) * 95452411) ^ (Math.round(e.py) * 31337007)) >>> 0;
       if (e.ore) oreH ^= ((e.id * 4256233) ^ (e.ore * 6542927)) >>> 0;
       if (e.isBuilding) bprogH ^= ((e.id * 31337) ^ ((e.bprog * 10000 | 0) * 99991)) >>> 0;
+      facH ^= ((e.id * 374761393) ^ (e.faction * 2654435761)) >>> 0;
     }
-    hpH >>>= 0; posH >>>= 0; oreH >>>= 0; bprogH >>>= 0;
-    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, mapH, tick: state.tick, cred: [state.credits[0], state.credits[1], state.credits[2]], entN: [...entN], entH: [...entH], hpH, posH, oreH, bprogH });
+    hpH >>>= 0; posH >>>= 0; oreH >>>= 0; bprogH >>>= 0; facH >>>= 0;
+    if (state.syncDebug) Object.assign(state.syncDebug, { entityH, creditsH, rngH, shellH, mapH, tick: state.tick, cred: [state.credits[0], state.credits[1], state.credits[2]], entN: [...entN], entH: [...entH], hpH, posH, oreH, bprogH, facH });
     window.__syncDebug = state.syncDebug ? { ...state.syncDebug } : null;
-    net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH, mapH, entN0: entN[0], entN1: entN[1], entN2: entN[2], hpH, posH, oreH, bprogH } });
+    net.send({ type: 'state_hash', tick: state.tick, hash: fullHash, debug: { entityH, creditsH, rngH, shellH, mapH, entN0: entN[0], entN1: entN[1], entN2: entN[2], hpH, posH, oreH, bprogH, facH } });
   }
 
   state._dirty = true;

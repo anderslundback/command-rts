@@ -9,6 +9,55 @@ import { hasPwr } from './resources.js';
 const _sr = (tx, ty, n) =>
   Math.abs(Math.sin(tx * 127.1 + ty * 311.7 + n * 74.3) * 43758.5453 % 1);
 
+// Per-tile static detail geometry (grass blades, ore diamonds, rock cracks). Tiles are static
+// except when ore depletes/regens, so we memoize the _sr-derived offsets keyed by tile index and
+// rebuild only when the tile's type changes. Eliminates ~16 sin-hash calls per visible tile/frame.
+const _tileDetail = new Array(MW * MH);
+function _detailFor(tx, ty, t) {
+  const idx = ty * MW + tx;
+  const c = _tileDetail[idx];
+  if (c !== undefined && c.type === t) return c;
+  let entry;
+  if (t === T.GRASS) {
+    const blades = new Array(4);
+    for (let n = 0; n < 4; n++) {
+      blades[n] = {
+        gx: (_sr(tx, ty, n * 3) * (TS - 2)) | 0,
+        gy: (_sr(tx, ty, n * 3 + 1) * (TS - 4)) | 0,
+        gh: (2 + _sr(tx, ty, n * 3 + 2) * 4) | 0,
+        style: `rgba(70,110,35,${0.09 + _sr(tx, ty, n + 50) * 0.07})`,
+      };
+    }
+    entry = { type: t, blades };
+  } else if (t === T.ORE) {
+    const diamonds = new Array(5);
+    for (let n = 0; n < 5; n++) {
+      diamonds[n] = {
+        dx: (3 + _sr(tx, ty, n * 4) * (TS - 6)) | 0,
+        dy: (3 + _sr(tx, ty, n * 4 + 1) * (TS - 6)) | 0,
+        ds: (1 + _sr(tx, ty, n * 4 + 2) * 2.5) | 0,
+      };
+    }
+    entry = { type: t, diamonds };
+  } else if (t === T.ROCK) {
+    const cracks = new Array(2);
+    for (let n = 0; n < 2; n++) {
+      const len = (4 + _sr(tx, ty, n * 5 + 12) * 9) | 0;
+      const ang = _sr(tx, ty, n * 5 + 13) * Math.PI;
+      cracks[n] = {
+        cx0: (_sr(tx, ty, n * 5 + 10) * (TS - 6)) | 0,
+        cy0: (_sr(tx, ty, n * 5 + 11) * (TS - 6)) | 0,
+        ex: Math.cos(ang) * len, ey: Math.sin(ang) * len,
+      };
+    }
+    entry = { type: t, cracks };
+  } else {
+    entry = { type: t };
+  }
+  _tileDetail[idx] = entry;
+  return entry;
+}
+
 export function render() {
   const ctx = state.ctx;
   const VW = state.canvas.width, VH = state.canvas.height;
@@ -56,12 +105,11 @@ function renderTiles(ctx, VW, VH) {
       if (t === T.GRASS) {
         ctx.fillStyle = 'rgba(255,255,255,0.035)';
         ctx.fillRect(px, py, TS, 1);
+        const blades = _detailFor(tx, ty, t).blades;
         for (let n = 0; n < 4; n++) {
-          const gx = px + (_sr(tx, ty, n * 3) * (TS - 2)) | 0;
-          const gy = py + (_sr(tx, ty, n * 3 + 1) * (TS - 4)) | 0;
-          const gh = 2 + (_sr(tx, ty, n * 3 + 2) * 4) | 0;
-          ctx.fillStyle = `rgba(70,110,35,${0.09 + _sr(tx, ty, n + 50) * 0.07})`;
-          ctx.fillRect(gx, gy, 1, gh);
+          const b = blades[n];
+          ctx.fillStyle = b.style;
+          ctx.fillRect(px + b.gx, py + b.gy, 1, b.gh);
         }
       } else if (t === T.WATER) {
         const w1y = py + 7 + Math.sin(tick * 0.035 + tx * 0.38 + ty * 0.2) * 2.5;
@@ -74,11 +122,11 @@ function renderTiles(ctx, VW, VH) {
         const sh = (Math.sin(tick * 0.08 + tx * 0.4 + ty * 0.7) + 1) * 0.5;
         ctx.fillStyle = `rgba(80,190,50,${0.12 + sh * 0.1})`;
         ctx.fillRect(px, py, TS, TS);
+        const diamonds = _detailFor(tx, ty, t).diamonds;
+        ctx.fillStyle = `rgba(140,235,65,${0.30 + sh * 0.25})`;
         for (let n = 0; n < 5; n++) {
-          const dx = px + 3 + (_sr(tx, ty, n * 4) * (TS - 6)) | 0;
-          const dy = py + 3 + (_sr(tx, ty, n * 4 + 1) * (TS - 6)) | 0;
-          const ds = 1 + (_sr(tx, ty, n * 4 + 2) * 2.5) | 0;
-          ctx.fillStyle = `rgba(140,235,65,${0.30 + sh * 0.25})`;
+          const dmd = diamonds[n];
+          const dx = px + dmd.dx, dy = py + dmd.dy, ds = dmd.ds;
           ctx.beginPath();
           ctx.moveTo(dx, dy - ds); ctx.lineTo(dx + ds, dy);
           ctx.lineTo(dx, dy + ds); ctx.lineTo(dx - ds, dy);
@@ -89,16 +137,15 @@ function renderTiles(ctx, VW, VH) {
         ctx.fillRect(px, py, TS, 1); ctx.fillRect(px, py, 1, TS);
         ctx.fillStyle = 'rgba(0,0,0,0.18)';
         ctx.fillRect(px + TS - 1, py, 1, TS); ctx.fillRect(px, py + TS - 1, TS, 1);
+        const cracks = _detailFor(tx, ty, t).cracks;
+        ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+        ctx.lineWidth = 1;
         for (let n = 0; n < 2; n++) {
-          const cx0 = px + (_sr(tx, ty, n * 5 + 10) * (TS - 6)) | 0;
-          const cy0 = py + (_sr(tx, ty, n * 5 + 11) * (TS - 6)) | 0;
-          const len = 4 + (_sr(tx, ty, n * 5 + 12) * 9) | 0;
-          const ang = _sr(tx, ty, n * 5 + 13) * Math.PI;
-          ctx.strokeStyle = 'rgba(0,0,0,0.30)';
-          ctx.lineWidth = 1;
+          const cr = cracks[n];
+          const x0 = px + cr.cx0, y0 = py + cr.cy0;
           ctx.beginPath();
-          ctx.moveTo(cx0, cy0);
-          ctx.lineTo(cx0 + Math.cos(ang) * len, cy0 + Math.sin(ang) * len);
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x0 + cr.ex, y0 + cr.ey);
           ctx.stroke();
         }
       }

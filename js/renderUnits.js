@@ -1,6 +1,14 @@
 import { TS, MW, FDATA } from './constants.js';
 import { state } from './state.js';
 
+// hitFlash is an integer 0..8; precompute the flash tint strings once instead of per-unit per-frame.
+const FLASH_BC = [], FLASH_BD = [];
+for (let h = 0; h <= 8; h++) {
+  const flash = h / 8;
+  FLASH_BC[h] = `rgb(255,${((1 - flash) * 60) | 0},${((1 - flash) * 30) | 0})`;
+  FLASH_BD[h] = `rgb(${(130 + flash * 80) | 0},${((1 - flash) * 20) | 0},0)`;
+}
+
 export function renderUnits(ctx, VW, VH) {
   const { cam, tick, selected } = state;
   ctx.save();
@@ -17,9 +25,9 @@ export function renderUnits(ctx, VW, VH) {
 
     const fd = FDATA[e.faction];
     const isSel = selected.includes(e.id);
-    const flash = e.hitFlash / 8;
-    const bc = flash > 0 ? `rgb(255,${((1-flash)*60)|0},${((1-flash)*30)|0})` : fd.color;
-    const bd = flash > 0 ? `rgb(${(130+flash*80)|0},${((1-flash)*20)|0},0)` : fd.dark;
+    const hf = e.hitFlash > 8 ? 8 : e.hitFlash;
+    const bc = hf > 0 ? FLASH_BC[hf] : fd.color;
+    const bd = hf > 0 ? FLASH_BD[hf] : fd.dark;
 
     // Selection ring + attack range ring
     if (isSel) {

@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { calcPower } from './resources.js';
 import { spawnExplosion, spawnMuzzle } from './particles.js';
 import { distToEnt } from './pathfinding.js';
+import { queryRect, nearestEnemy } from './spatial.js';
 
 export function dealDmg(e, dmg, attacker) {
   let actualDmg = dmg;
@@ -58,22 +59,19 @@ export function dealDmg(e, dmg, attacker) {
 
 export function dealSplash(cx, cy, baseDmg, radiusPx, attacker) {
   const rSq = radiusPx * radiusPx;
-  for (const e of state.entities) {
-    if (e.dead || e.loaded) continue;
+  const tx = (cx / TS) | 0, ty = (cy / TS) | 0;
+  const rt = ((radiusPx / TS) | 0) + 1;
+  queryRect(tx - rt, ty - rt, tx + rt, ty + rt, (e) => {
+    if (e.dead || e.loaded) return;
     const ex = e.isBuilding ? (e.x + e.w / 2) * TS : e.px + TS / 2;
     const ey = e.isBuilding ? (e.y + e.h / 2) * TS : e.py + TS / 2;
     const dx = ex - cx, dy = ey - cy;
     if (dx * dx + dy * dy <= rSq) dealDmg(e, baseDmg, attacker);
-  }
+  });
 }
 
 export function autoAttack(u) {
   if (!u.dmg) return;
-  let nearest = null, nd = u.range + 0.1;
-  for (const e of state.entities) {
-    if (e.dead || e.loaded || e.faction === u.faction) continue;
-    const d = distToEnt(u, e);
-    if (d < nd) { nd = d; nearest = e; }
-  }
+  const nearest = nearestEnemy(u, u.range);
   if (nearest) { u.target = nearest.id; u.state = 'attack'; }
 }

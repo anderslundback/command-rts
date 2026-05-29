@@ -26,6 +26,15 @@ export function getPowerRatio(f) {
 
 export function nearestRefinery(f, x, y) {
   let best = null, bd = Infinity;
+  const cache = state.factionCache?.[f]?.doneBuildings;
+  if (cache) {
+    for (const e of cache) {
+      if (e.type !== 'refinery') continue;
+      const d = Math.abs(e.x - x) + Math.abs(e.y - y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
   for (const e of state.entities) {
     if (e.dead || !e.isBuilding || e.faction !== f || e.type !== 'refinery' || !e.done) continue;
     const d = Math.abs(e.x - x) + Math.abs(e.y - y);

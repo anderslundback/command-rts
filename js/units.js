@@ -9,6 +9,7 @@ import { dealDmg, dealSplash, autoAttack } from './combat.js';
 import { spawnShell } from './shells.js';
 import { spawnMuzzle } from './particles.js';
 import { orderHarvest, orderMove, orderAttack, orderAttackMove, orderPatrol } from './orders.js';
+import { nearestEnemy, entsAtTile, queryRadius } from './spatial.js';
 import { playShot, playCash } from './audio.js';
 
 
@@ -25,10 +26,11 @@ export function updateUnit(u) {
 
   // Depot repair: vehicle must be idle on the pad (consistent for all factions — deterministic in multiplayer)
   if (VEHICLE_TYPES.has(u.type) && u.hp < u.maxHp) {
-    if (state.tick % 20 === 0 && hasPwr(u.faction)) {
-      const depot = state.entities.find(e => !e.dead && e.isBuilding && e.faction === u.faction &&
+    if (state.tick % 20 === 0 && hasPwr(u.faction) && u.state === 'idle') {
+      const db = state.factionCache?.[u.faction]?.doneBuildings;
+      const depot = (db ?? state.entities).find(e => !e.dead && e.isBuilding && e.faction === u.faction &&
         e.type === 'depot' && e.done &&
-        u.state === 'idle' && u.x >= e.x && u.x < e.x + e.w && u.y >= e.y && u.y < e.y + e.h);
+        u.x >= e.x && u.x < e.x + e.w && u.y >= e.y && u.y < e.y + e.h);
       if (depot && state.credits[u.faction] >= 1) {
         state.credits[u.faction] -= 1;
         u.hp = Math.min(u.maxHp, u.hp + 10);
@@ -46,12 +48,10 @@ export function updateUnit(u) {
 
   // Crush any enemy infantry sharing this tile (handles infantry walking into a vehicle)
   if (VEHICLE_TYPES.has(u.type)) {
-    for (const e of state.entities) {
-      if (!e.dead && e.isUnit && e !== u && e.x === u.x && e.y === u.y &&
-          e.faction !== u.faction && e.armorType === 'infantry') {
-        dealDmg(e, e.maxHp + 1, u);
-      }
-    }
+    entsAtTile(u.x, u.y, (e) => {
+      if (e.dead || !e.isUnit || e === u || e.faction === u.faction || e.armorType !== 'infantry') return;
+      dealDmg(e, e.maxHp + 1, u);
+    });
   }
 
   switch (u.state) {
@@ -120,17 +120,7 @@ export function updateUnit(u) {
     }
 
     case 'attack_move': {
-      // Scan for nearest enemy in range
-      let nearest = null;
-      let nearestDist = Infinity;
-      for (const e of state.entities) {
-        if (!e.dead && e.faction !== u.faction) {
-          const d = distToEnt(u, e);
-          if (d < u.range + 0.5 && d < nearestDist && u.dmg > 0) {
-            nearest = e; nearestDist = d;
-          }
-        }
-      }
+      const nearest = u.dmg > 0 ? nearestEnemy(u, u.range, 0.5) : null;
       if (nearest) {
         u.state = 'attack'; u.target = nearest.id; u.path = [];
       } else {
@@ -141,13 +131,7 @@ export function updateUnit(u) {
     }
 
     case 'patrol': {
-      let nearest = null, nearestDist = Infinity;
-      for (const e of state.entities) {
-        if (!e.dead && e.faction !== u.faction && u.dmg > 0) {
-          const d = distToEnt(u, e);
-          if (d < u.range + 0.5 && d < nearestDist) { nearest = e; nearestDist = d; }
-        }
-      }
+      const nearest = u.dmg > 0 ? nearestEnemy(u, u.range, 0.5) : null;
       if (nearest) {
         u.state = 'attack'; u.target = nearest.id; u.path = [];
         break;
@@ -264,22 +248,29 @@ export function updateUnit(u) {
     }
   }
 
-  // Medic passive heal: heals 3 HP to one nearby friendly infantry every second
+  // Medic passive heal: heals 3 HP to one nearby friendly infantry every second.
+  // Picks the FIRST qualifying unit in state.entities order (smallest _gi) to match the old scan.
   if (u.type === 'medic' && state.tick % 20 === 0) {
-    for (const e of state.entities) {
-      if (e.dead || e.loaded || e === u || e.faction !== u.faction || !e.isUnit) continue;
-      if (e.armorType !== 'infantry') continue;
-      if (e.hp < e.maxHp && distToEnt(u, e) <= u.range) { e.hp = Math.min(e.maxHp, e.hp + 3); break; }
-    }
+    const r = Math.ceil(u.range) + 1;
+    let best = null, bgi = Infinity;
+    queryRadius(u.x, u.y, r, (e) => {
+      if (e.dead || e.loaded || e === u || e.faction !== u.faction || !e.isUnit) return;
+      if (e.armorType !== 'infantry' || e.hp >= e.maxHp) return;
+      if (distToEnt(u, e) <= u.range && e._gi < bgi) { best = e; bgi = e._gi; }
+    });
+    if (best) best.hp = Math.min(best.maxHp, best.hp + 3);
   }
 
-  // Mechanic passive repair: repairs 5 HP to one nearby friendly vehicle every second
+  // Mechanic passive repair: repairs 5 HP to one nearby friendly vehicle every second.
   if (u.type === 'mechanic' && state.tick % 20 === 0) {
-    for (const e of state.entities) {
-      if (e.dead || e.loaded || e === u || e.faction !== u.faction || !e.isUnit) continue;
-      if (!VEHICLE_TYPES.has(e.type)) continue;
-      if (e.hp < e.maxHp && distToEnt(u, e) <= u.range) { e.hp = Math.min(e.maxHp, e.hp + 5); break; }
-    }
+    const r = Math.ceil(u.range) + 1;
+    let best = null, bgi = Infinity;
+    queryRadius(u.x, u.y, r, (e) => {
+      if (e.dead || e.loaded || e === u || e.faction !== u.faction || !e.isUnit) return;
+      if (!VEHICLE_TYPES.has(e.type) || e.hp >= e.maxHp) return;
+      if (distToEnt(u, e) <= u.range && e._gi < bgi) { best = e; bgi = e._gi; }
+    });
+    if (best) best.hp = Math.min(best.maxHp, best.hp + 5);
   }
 }
 
@@ -316,13 +307,7 @@ function updateNavalUnit(u) {
       break;
 
     case 'attack_move': {
-      let nearest = null, nearestDist = Infinity;
-      for (const e of state.entities) {
-        if (!e.dead && e.faction !== u.faction) {
-          const d = distToEnt(u, e);
-          if (d < u.range + 0.5 && d < nearestDist && u.dmg > 0) { nearest = e; nearestDist = d; }
-        }
-      }
+      const nearest = u.dmg > 0 ? nearestEnemy(u, u.range, 0.5) : null;
       if (nearest) {
         u.state = 'attack'; u.target = nearest.id; u.path = [];
       } else {
@@ -333,13 +318,7 @@ function updateNavalUnit(u) {
     }
 
     case 'patrol': {
-      let nearest = null, nearestDist = Infinity;
-      for (const e of state.entities) {
-        if (!e.dead && e.faction !== u.faction && u.dmg > 0) {
-          const d = distToEnt(u, e);
-          if (d < u.range + 0.5 && d < nearestDist) { nearest = e; nearestDist = d; }
-        }
-      }
+      const nearest = u.dmg > 0 ? nearestEnemy(u, u.range, 0.5) : null;
       if (nearest) { u.state = 'attack'; u.target = nearest.id; u.path = []; break; }
       stepPath(u);
       if (!u.path.length) {
@@ -419,16 +398,7 @@ function updateAirUnit(u) {
       else u.state = 'idle';
       break;
     case 'attack_move': {
-      let nearest = null;
-      let nearestDist = Infinity;
-      for (const e of state.entities) {
-        if (!e.dead && e.faction !== u.faction) {
-          const d = distToEnt(u, e);
-          if (d < u.range + 0.5 && d < nearestDist && u.dmg > 0) {
-            nearest = e; nearestDist = d;
-          }
-        }
-      }
+      const nearest = u.dmg > 0 ? nearestEnemy(u, u.range, 0.5) : null;
       if (nearest) {
         u.state = 'attack'; u.target = nearest.id;
       } else if (u.destPx !== undefined) {
@@ -528,8 +498,11 @@ function startReturn(u) {
 function stepPath(u) {
   if (!u.path.length) return;
   const next = u.path[0];
-  const blocker = state.entities.find(e => !e.dead && e.isUnit && e !== u &&
-      e.armorType !== 'air' && e.x === next.x && e.y === next.y);
+  let blocker = null;
+  entsAtTile(next.x, next.y, (e) => {
+    if (blocker || e.dead || !e.isUnit || e === u || e.armorType === 'air') return;
+    blocker = e;
+  });
   if (blocker) {
     if (VEHICLE_TYPES.has(u.type) &&
         blocker.faction !== u.faction && blocker.armorType === 'infantry') {

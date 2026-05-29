@@ -14,19 +14,25 @@ export function makeAI(f) {
     htimer: 200 + f * 80,
 
     myBuildings(type) {
-      return state.entities.filter(e => !e.dead && e.isBuilding && e.faction === this.f && e.done && (!type || e.type === type));
+      const db = state.factionCache?.[this.f].doneBuildings
+        ?? state.entities.filter(e => !e.dead && e.isBuilding && e.faction === this.f && e.done);
+      return type ? db.filter(b => b.type === type) : db.slice();
     },
     myUnits(type) {
-      return state.entities.filter(e => !e.dead && e.isUnit && e.faction === this.f && (!type || e.type === type));
+      const us = state.factionCache?.[this.f].units
+        ?? state.entities.filter(e => !e.dead && e.isUnit && e.faction === this.f);
+      return type ? us.filter(u => u.type === type) : us.slice();
     },
 
     update() {
       this.btimer++;
       const cr = state.credits[this.f];
 
-      // Cache entity lists for this tick — avoids 15+ repeated filter() scans per update().
-      const blist = state.entities.filter(e => !e.dead && e.isBuilding && e.faction === this.f && e.done);
-      const ulist = state.entities.filter(e => !e.dead && e.isUnit && e.faction === this.f);
+      // Per-tick derived lists (built in gameLoop, state.entities order) — avoids 15+ filter() scans per update().
+      const blist = state.factionCache?.[this.f].doneBuildings
+        ?? state.entities.filter(e => !e.dead && e.isBuilding && e.faction === this.f && e.done);
+      const ulist = state.factionCache?.[this.f].units
+        ?? state.entities.filter(e => !e.dead && e.isUnit && e.faction === this.f);
       const has  = t => blist.some(b => b.type === t);
       const bOf  = t => blist.filter(b => b.type === t);
       const uOf  = t => ulist.filter(u => u.type === t);
@@ -64,11 +70,23 @@ export function makeAI(f) {
         const artType = ['artillery', 'v2rocket', 'tomahawk'][this.f];
         const airType = ['fighter', 'gunship', 'drone'][this.f];
 
-        // Analyse enemy so we can counter their composition
-        const enemies = state.entities.filter(e => !e.dead && e.faction !== this.f);
-        const enemyAir   = enemies.filter(e => e.isUnit && e.armorType === 'air').length;
-        const enemyHeavy = enemies.filter(e => e.isUnit && e.armorType === 'heavy').length;
-        const enemyNaval = enemies.filter(e => e.isUnit && e.armorType === 'naval').length;
+        // Analyse enemy composition (order-independent counts) so we can counter it
+        let enemyAir = 0, enemyHeavy = 0, enemyNaval = 0;
+        if (state.factionCache) {
+          for (let ef = 0; ef < 3; ef++) {
+            if (ef === this.f) continue;
+            for (const e of state.factionCache[ef].units) {
+              if (e.armorType === 'air') enemyAir++;
+              else if (e.armorType === 'heavy') enemyHeavy++;
+              else if (e.armorType === 'naval') enemyNaval++;
+            }
+          }
+        } else {
+          const enemies = state.entities.filter(e => !e.dead && e.isUnit && e.faction !== this.f);
+          enemyAir   = enemies.filter(e => e.armorType === 'air').length;
+          enemyHeavy = enemies.filter(e => e.armorType === 'heavy').length;
+          enemyNaval = enemies.filter(e => e.armorType === 'naval').length;
+        }
 
         // Harvesters: hard economic priority before military
         if (fac && uOf('harvester').length < 3 && cr >= UDEF.harvester.cost) {

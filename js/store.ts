@@ -102,6 +102,7 @@ export interface SyncDebugState {
   posH: number;
   oreH: number;
   bprogH: number;
+  facH: number;
 }
 
 // ── Store shape ──────────────────────────────────────────────────────────────
@@ -207,9 +208,12 @@ export function useUIStore<T>(selector: (state: UIState) => T): T {
 
 export function syncFromGameState(): void {
   const f: number = s.playerFaction;
-  const done: any[] = s.entities.filter(
-    (e: any) => !e.dead && e.isBuilding && e.faction === f && e.done
-  );
+  // Reuse the per-tick factionCache (built in gameTick) instead of a fresh full-entities scan.
+  // It is built at tick start, so guard against a building that died later this tick.
+  const fcDone: any[] | undefined = s.factionCache?.[f]?.doneBuildings;
+  const done: any[] = fcDone
+    ? fcDone.filter((e: any) => !e.dead)
+    : s.entities.filter((e: any) => !e.dead && e.isBuilding && e.faction === f && e.done);
 
   // Derive phase — stay 'playing' during the canvas announcement window
   let phase: UIState['phase'] = 'menu';

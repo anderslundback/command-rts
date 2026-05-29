@@ -219,7 +219,7 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
   const hex = (n: number) => '0x' + (n >>> 0).toString(16).toUpperCase().padStart(8, '0');
   const diff = (k: string) => diverged.includes(k);
   const FACTION_LABELS = ['ALN', 'BRO', 'SYN'];
-  const hasSubDiff = diff('hpH') || diff('posH') || diff('oreH') || diff('bprogH');
+  const hasSubDiff = diff('hpH') || diff('posH') || diff('oreH') || diff('bprogH') || diff('facH');
   return (
     <div style={{
       position: 'fixed',
@@ -253,7 +253,7 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
       {/* Sub-field hashes — show what kind of entity state is diverging */}
       {(diff('entityH') || hasSubDiff) && (
         <div style={{ marginTop: 2 }}>
-          {([['hpH', 'hp   '], ['posH', 'pos  '], ['oreH', 'ore  '], ['bprogH', 'bprog']] as [keyof SyncDebugState, string][]).map(([k, lbl]) => {
+          {([['hpH', 'hp   '], ['posH', 'pos  '], ['oreH', 'ore  '], ['bprogH', 'bprog'], ['facH', 'fac  ']] as [keyof SyncDebugState, string][]).map(([k, lbl]) => {
             const val = debug[k] as number;
             const isDiff = diff(k as string);
             return (

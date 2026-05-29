@@ -7,6 +7,7 @@ import { spawnMuzzle } from './particles.js';
 import { spawnNear, spawnNearNaval, placeBuilding } from './placement.js';
 import { orderMove, orderHarvest } from './orders.js';
 import { distToEnt } from './pathfinding.js';
+import { queryRect } from './spatial.js';
 import { setMsg } from './hud.js';
 import { speak, speakUnit, speakBuilding, playShot } from './audio.js';
 
@@ -93,27 +94,32 @@ export function updateBuilding(b) {
     const curTgt = b.target ? getEnt(b.target) : null;
     if (!curTgt || curTgt.dead) {
       b.target = null;
+      const qr = Math.ceil(b.range) + 1;
+      const qx0 = b.x - qr, qy0 = b.y - qr, qx1 = b.x + b.w - 1 + qr, qy1 = b.y + b.h - 1 + qr;
       if (b.type === 'antiair') {
-        for (const e of state.entities) {
-          if (e.dead || e.faction === b.faction) continue;
-          if (e.armorType === 'air' && distToEnt(b, e) <= b.range) { b.target = e.id; break; }
-        }
+        // First air enemy in range, picking first-in-entities-order (smallest _gi).
+        let airE = null, airGi = Infinity;
+        queryRect(qx0, qy0, qx1, qy1, (e) => {
+          if (e.dead || e.faction === b.faction || e.armorType !== 'air') return;
+          if (distToEnt(b, e) <= b.range && e._gi < airGi) { airE = e; airGi = e._gi; }
+        });
+        if (airE) b.target = airE.id;
       }
       if (!b.target) {
-        // Pass 1: nearest enemy unit
-        let nearest = null, nearestDist = b.range + 1;
-        for (const e of state.entities) {
-          if (e.dead || e.faction === b.faction || e.isBuilding) continue;
+        // Pass 1: nearest enemy unit (ties → first in entities order)
+        let nearest = null, nd = b.range + 1, ngi = Infinity;
+        queryRect(qx0, qy0, qx1, qy1, (e) => {
+          if (e.dead || e.faction === b.faction || e.isBuilding) return;
           const d = distToEnt(b, e);
-          if (d < nearestDist) { nearest = e; nearestDist = d; }
-        }
+          if (d < nd || (d === nd && nearest && e._gi < ngi)) { nd = d; nearest = e; ngi = e._gi; }
+        });
         // Pass 2: nearest enemy completed building (only when no units in range)
         if (!nearest) {
-          for (const e of state.entities) {
-            if (e.dead || e.faction === b.faction || !e.isBuilding || !e.done) continue;
+          queryRect(qx0, qy0, qx1, qy1, (e) => {
+            if (e.dead || e.faction === b.faction || !e.isBuilding || !e.done) return;
             const d = distToEnt(b, e);
-            if (d <= b.range && d < nearestDist) { nearest = e; nearestDist = d; }
-          }
+            if (d <= b.range && (d < nd || (d === nd && nearest && e._gi < ngi))) { nd = d; nearest = e; ngi = e._gi; }
+          });
         }
         if (nearest) b.target = nearest.id;
       }

@@ -1,6 +1,14 @@
 import { TS, MW, FDATA, BDEF } from './constants.js';
 import { state } from './state.js';
 
+// hitFlash is an integer 0..8; precompute the flash tint strings once instead of per-building per-frame.
+const FLASH_BC = [], FLASH_BD = [];
+for (let h = 0; h <= 8; h++) {
+  const flash = h / 8;
+  FLASH_BC[h] = `rgb(255,${((1 - flash) * 60) | 0},${((1 - flash) * 30) | 0})`;
+  FLASH_BD[h] = `rgb(${(140 + flash * 80) | 0},${((1 - flash) * 20) | 0},0)`;
+}
+
 export function renderBuildings(ctx, VW, VH) {
   const { cam, tick, selected } = state;
   ctx.save();
@@ -17,10 +25,10 @@ export function renderBuildings(ctx, VW, VH) {
     const fd = FDATA[e.faction];
     const isSel = selected.includes(e.id);
     const alpha = e.done ? 1 : 0.5 + 0.3 * Math.abs(Math.sin(tick * 0.05));
-    const flash = e.hitFlash / 8;
+    const hf = e.hitFlash > 8 ? 8 : e.hitFlash;
     ctx.globalAlpha = alpha;
 
-    drawBuilding(ctx, e, bx, by, bw, bh, fd, isSel, flash, tick);
+    drawBuilding(ctx, e, bx, by, bw, bh, fd, isSel, hf, tick);
 
     if (isSel && e.dmg > 0 && e.range > 0) {
       const bcx = bx + bw / 2, bcy = by + bh / 2;
@@ -64,9 +72,9 @@ export function renderBuildings(ctx, VW, VH) {
   ctx.restore();
 }
 
-function drawBuilding(ctx, e, bx, by, bw, bh, fd, isSel, flash, tick) {
-  const bc = flash > 0 ? `rgb(255,${((1 - flash) * 60) | 0},${((1 - flash) * 30) | 0})` : fd.color;
-  const bd = flash > 0 ? `rgb(${(140 + flash * 80) | 0},${((1 - flash) * 20) | 0},0)` : fd.dark;
+function drawBuilding(ctx, e, bx, by, bw, bh, fd, isSel, hf, tick) {
+  const bc = hf > 0 ? FLASH_BC[hf] : fd.color;
+  const bd = hf > 0 ? FLASH_BD[hf] : fd.dark;
   // Drop shadow (skip for flat pad buildings)
   if (e.type !== 'depot') {
     ctx.fillStyle = 'rgba(0,0,0,0.40)';

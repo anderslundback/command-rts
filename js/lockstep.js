@@ -113,6 +113,8 @@ function restoreEnt(s) {
   if (s.patrolA) e.patrolA = { ...s.patrolA };
   if (s.patrolB) e.patrolB = { ...s.patrolB };
   if (s.cargo) e.cargo = [...s.cargo];
+  if (s.waypoint) e.waypoint = { ...s.waypoint };
+  if (s.harvestTile) e.harvestTile = { ...s.harvestTile };
   return e;
 }
 
@@ -149,6 +151,8 @@ export function scheduleInput(cmd) {
 // simulateTickFn must be game.js's _gameTick (passed to avoid circular import).
 export function onRemoteInput(tick, slot, cmd, _applyCmd, simulateTickFn) {
   if (!state.rollback) return;
+  const nSlots = state.net?.slotFactions?.length ?? 3;
+  if (slot < 0 || slot >= nSlots) return;
   state.rollback.inputHistory[tick] ??= {};
   const predicted = state.rollback.inputHistory[tick][slot]; // null = predicted no-input; undefined = future tick
   state.rollback.inputHistory[tick][slot] = cmd ?? null;
@@ -216,7 +220,7 @@ export function entityHash(entities, extraState) {
   let h = 0;
   for (const e of entities) {
     if (e.dead) continue;
-    h ^= (e.id * 73856093) ^ ((e.hp | 0) * 19349663) ^ (Math.round(e.px) * 83492791) ^ (Math.round(e.py) * 95452411);
+    h ^= (e.id * 73856093) ^ ((e.hp | 0) * 19349663) ^ (Math.round(e.px) * 83492791) ^ (Math.round(e.py) * 95452411) ^ (e.faction * 2654435761);
     if (e.ore) h ^= (e.ore * 4256233) >>> 0;
     h = (h ^ (h >>> 13)) * 1540483477;
     h = h >>> 0;

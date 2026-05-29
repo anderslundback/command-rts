@@ -4,6 +4,7 @@ import { passable, passableNaval } from './map.js';
 
 class MinHeap {
   constructor() { this.d = []; }
+  clear() { this.d.length = 0; }
   push(item) { this.d.push(item); this._up(this.d.length - 1); }
   pop() {
     const top = this.d[0];
@@ -37,35 +38,57 @@ const DIRS = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
 const SIZE = MW * MH;
 
 // Preallocated buffers — reused every A* call to avoid GC pressure in the combat hot path.
-const _occ    = new Uint8Array(SIZE);
+// Occupancy grids are rebuilt at most ONCE per tick (tick-stamped), not per call:
+//   _occ    — land: non-depot buildings + all units      (ignoreUnits=false)
+//   _occNoU — land: non-depot buildings only             (ignoreUnits=true)
+// The per-call start-tile exclusion is dropped: the start node is closed before any neighbour
+// can re-enter it, so its occupancy bit is never read. The grid is therefore a pure function of
+// state.entities at the tick's first pathfind call — identical across clients (deterministic).
+// After rollback, state.tick is restored so the stamp mismatches and forces a correct rebuild.
+const _occ     = new Uint8Array(SIZE);
+const _occNoU  = new Uint8Array(SIZE);
+let   _occTick = -1, _occNoUTick = -1;
 const _g      = new Float32Array(SIZE);
 const _came   = new Int32Array(SIZE);
 const _closed = new Uint8Array(SIZE);
+const _heap   = new MinHeap();
 
-export function astar(sx, sy, ex, ey, ignoreUnits) {
-  if (sx === ex && sy === ey) return [];
-
-  _occ.fill(0);
+function _buildLandOcc(grid, includeUnits) {
+  grid.fill(0);
   for (const e of state.entities) {
     if (e.dead) continue;
     if (e.isBuilding) {
       if (e.type === 'depot') continue; // depot pad is walkable
       for (let dy = 0; dy < e.h; dy++)
         for (let dx = 0; dx < e.w; dx++)
-          _occ[(e.y + dy) * MW + (e.x + dx)] = 1;
-    } else if (e.isUnit && !ignoreUnits && !(e.x === sx && e.y === sy)) {
-      _occ[e.y * MW + e.x] = 1;
+          grid[(e.y + dy) * MW + (e.x + dx)] = 1;
+    } else if (includeUnits && e.isUnit) {
+      grid[e.y * MW + e.x] = 1;
     }
+  }
+}
+
+export function astar(sx, sy, ex, ey, ignoreUnits) {
+  if (sx === ex && sy === ey) return [];
+
+  let occ;
+  if (ignoreUnits) {
+    if (_occNoUTick !== state.tick) { _buildLandOcc(_occNoU, false); _occNoUTick = state.tick; }
+    occ = _occNoU;
+  } else {
+    if (_occTick !== state.tick) { _buildLandOcc(_occ, true); _occTick = state.tick; }
+    occ = _occ;
   }
 
   _g.fill(Infinity);
   _came.fill(-1);
   _closed.fill(0);
-  const occ = _occ, g = _g, came = _came, closed = _closed;
+  const g = _g, came = _came, closed = _closed;
   const sk = sy * MW + sx;
   g[sk] = 0;
 
-  const open = new MinHeap();
+  const open = _heap;
+  open.clear();
   open.push({ x: sx, y: sy, f: Math.abs(sx - ex) + Math.abs(sy - ey) });
 
   let iters = 0;
@@ -103,35 +126,51 @@ export function astar(sx, sy, ex, ey, ignoreUnits) {
   return [];
 }
 
-// Separate preallocated buffers for naval pathfinding (runs concurrently with land A*)
-const _nocc    = new Uint8Array(SIZE);
+// Separate preallocated buffers for naval pathfinding (runs concurrently with land A*).
+// Same tick-stamped occupancy strategy: all buildings + (optionally) naval units.
+const _nocc     = new Uint8Array(SIZE);
+const _noccNoU  = new Uint8Array(SIZE);
+let   _noccTick = -1, _noccNoUTick = -1;
 const _ng      = new Float32Array(SIZE);
 const _ncame   = new Int32Array(SIZE);
 const _nclosed = new Uint8Array(SIZE);
+const _nheap   = new MinHeap();
 
-export function astarNaval(sx, sy, ex, ey, ignoreUnits) {
-  if (sx === ex && sy === ey) return [];
-
-  _nocc.fill(0);
+function _buildNavalOcc(grid, includeUnits) {
+  grid.fill(0);
   for (const e of state.entities) {
     if (e.dead) continue;
     if (e.isBuilding) {
       for (let dy = 0; dy < e.h; dy++)
         for (let dx = 0; dx < e.w; dx++)
-          _nocc[(e.y + dy) * MW + (e.x + dx)] = 1;
-    } else if (e.isUnit && e.armorType === 'naval' && !ignoreUnits && !(e.x === sx && e.y === sy)) {
-      _nocc[e.y * MW + e.x] = 1;
+          grid[(e.y + dy) * MW + (e.x + dx)] = 1;
+    } else if (includeUnits && e.isUnit && e.armorType === 'naval') {
+      grid[e.y * MW + e.x] = 1;
     }
+  }
+}
+
+export function astarNaval(sx, sy, ex, ey, ignoreUnits) {
+  if (sx === ex && sy === ey) return [];
+
+  let occ;
+  if (ignoreUnits) {
+    if (_noccNoUTick !== state.tick) { _buildNavalOcc(_noccNoU, false); _noccNoUTick = state.tick; }
+    occ = _noccNoU;
+  } else {
+    if (_noccTick !== state.tick) { _buildNavalOcc(_nocc, true); _noccTick = state.tick; }
+    occ = _nocc;
   }
 
   _ng.fill(Infinity);
   _ncame.fill(-1);
   _nclosed.fill(0);
-  const occ = _nocc, g = _ng, came = _ncame, closed = _nclosed;
+  const g = _ng, came = _ncame, closed = _nclosed;
   const sk = sy * MW + sx;
   g[sk] = 0;
 
-  const open = new MinHeap();
+  const open = _nheap;
+  open.clear();
   open.push({ x: sx, y: sy, f: Math.abs(sx - ex) + Math.abs(sy - ey) });
 
   let iters = 0;

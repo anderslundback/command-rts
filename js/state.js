@@ -74,5 +74,7 @@ export const state = {
   syncDebug: null, // populated during net games: { entityH, creditsH, rngH, shellH, tick, resyncs, lastDesyncTick, diverged }
   mapDirty: false,    // set by map.js/placement.js when a tile changes; cleared after snapshot
   _bldgCounts: null,  // Map<"faction:type", count> — rebuilt each tick in gameLoop for train speedMult
+  factionCache: null, // [faction] = { units, buildings, doneBuildings } — derived per-tick cache; NEVER snapshotted
+  grid: null,         // spatial bucket grid — derived per-tick from state.entities; NEVER snapshotted
   _lastNetStall: false, // debounce: tracks last value pushed to uiStore.netStall
 };
