@@ -205,6 +205,7 @@ export function updateUnit(u) {
       }
       if (u.x === ht.x && u.y === ht.y) {
         u.ore += 30;
+        u.scoopEvent = state.tick;
         state.map[ht.y][ht.x] = T.GRASS;
         state.mapDirty = true;
         if (u.ore >= u.maxOre) {
@@ -235,6 +236,7 @@ export function updateUnit(u) {
       if (adjToBuilding(u.x, u.y, ref)) {
         state.credits[u.faction] += Math.round(u.ore * FBONUSES[u.faction].creditMult);
         u.ore = 0;
+        u.dumpEvent = state.tick;
         if (u.faction === state.playerFaction && !state.isRollingBack) playCash();
         orderHarvest(u, ref);
       } else {
@@ -410,6 +412,7 @@ function updateAirUnit(u) {
           dequeueNext(u);
         } else {
           u.facing = Math.atan2(dy, dx);
+          u.chassisFacing = u.facing;
           u.px += (dx / dist) * u.speed;
           u.py += (dy / dist) * u.speed;
           u.x = (u.px / TS) | 0;
@@ -527,8 +530,13 @@ function stepPath(u) {
   } else {
     u.blockWait = 0;
   }
-  if (u.armorType === 'naval') u.facing = Math.atan2(next.y - u.y, next.x - u.x);
-  u.mprog += u.speed / TS;
+  // Chassis direction tracks the path step so the hull/body visually leads the
+  // movement; the gun (u.facing) is still steered by combat.js to track targets.
+  u.chassisFacing = Math.atan2(next.y - u.y, next.x - u.x);
+  // Diagonal steps span √2 tiles of world distance — slow the per-tick progress
+  // accordingly so units don't travel faster on the diagonals.
+  const stepLen = (next.x !== u.x && next.y !== u.y) ? Math.SQRT2 : 1;
+  u.mprog += u.speed / TS / stepLen;
   if (u.mprog >= 1) {
     u.x = next.x; u.y = next.y;
     u.px = u.x * TS; u.py = u.y * TS;

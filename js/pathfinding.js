@@ -34,7 +34,22 @@ class MinHeap {
   }
 }
 
-const DIRS = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+// 8-direction movement with √2 cost for diagonals. Orthogonal neighbours come
+// first so when two paths have equal f, the heap pop order favours the cardinal
+// step (visually nicer when the diagonal is also valid).
+const SQRT2 = Math.SQRT2;
+const DIRS = [
+  { x: 1, y: 0, c: 1 }, { x: -1, y: 0, c: 1 },
+  { x: 0, y: 1, c: 1 }, { x: 0, y: -1, c: 1 },
+  { x: 1, y: 1, c: SQRT2 }, { x: -1, y: 1, c: SQRT2 },
+  { x: 1, y: -1, c: SQRT2 }, { x: -1, y: -1, c: SQRT2 },
+];
+// Octile distance — admissible heuristic for 8-direction movement.
+function _octile(dx, dy) {
+  const adx = dx < 0 ? -dx : dx;
+  const ady = dy < 0 ? -dy : dy;
+  return (adx > ady ? adx : ady) + (SQRT2 - 1) * (adx < ady ? adx : ady);
+}
 const SIZE = MW * MH;
 
 // Preallocated buffers — reused every A* call to avoid GC pressure in the combat hot path.
@@ -100,7 +115,7 @@ export function astar(sx, sy, ex, ey, ignoreUnits) {
 
   const open = _heap;
   open.clear();
-  open.push({ x: sx, y: sy, f: Math.abs(sx - ex) + Math.abs(sy - ey) });
+  open.push({ x: sx, y: sy, f: _octile(sx - ex, sy - ey) });
 
   let iters = 0;
   while (open.size > 0 && ++iters < 3000) {
@@ -122,15 +137,21 @@ export function astar(sx, sy, ex, ey, ignoreUnits) {
     for (const d of DIRS) {
       const nx = cur.x + d.x, ny = cur.y + d.y;
       if (!passable(nx, ny)) continue;
+      // Diagonal corner-cutting prevention: both orthogonal neighbours must be
+      // passable and unblocked, otherwise the unit would squeeze through a wall.
+      if (d.x !== 0 && d.y !== 0) {
+        if (!passable(cur.x + d.x, cur.y) || !passable(cur.x, cur.y + d.y)) continue;
+        if (occ[cur.y * MW + (cur.x + d.x)] || occ[(cur.y + d.y) * MW + cur.x]) continue;
+      }
       const nk = ny * MW + nx;
       if (closed[nk]) continue;
       const isGoal = nx === ex && ny === ey;
       if (occ[nk] && !isGoal) continue;
-      const ng = g[ck] + 1;
+      const ng = g[ck] + d.c;
       if (ng < g[nk]) {
         came[nk] = ck;
         g[nk] = ng;
-        open.push({ x: nx, y: ny, f: ng + Math.abs(nx - ex) + Math.abs(ny - ey) });
+        open.push({ x: nx, y: ny, f: ng + _octile(nx - ex, ny - ey) });
       }
     }
   }
@@ -182,7 +203,7 @@ export function astarNaval(sx, sy, ex, ey, ignoreUnits) {
 
   const open = _nheap;
   open.clear();
-  open.push({ x: sx, y: sy, f: Math.abs(sx - ex) + Math.abs(sy - ey) });
+  open.push({ x: sx, y: sy, f: _octile(sx - ex, sy - ey) });
 
   let iters = 0;
   while (open.size > 0 && ++iters < 3000) {
@@ -204,15 +225,19 @@ export function astarNaval(sx, sy, ex, ey, ignoreUnits) {
     for (const d of DIRS) {
       const nx = cur.x + d.x, ny = cur.y + d.y;
       if (!passableNaval(nx, ny)) continue;
+      if (d.x !== 0 && d.y !== 0) {
+        if (!passableNaval(cur.x + d.x, cur.y) || !passableNaval(cur.x, cur.y + d.y)) continue;
+        if (occ[cur.y * MW + (cur.x + d.x)] || occ[(cur.y + d.y) * MW + cur.x]) continue;
+      }
       const nk = ny * MW + nx;
       if (closed[nk]) continue;
       const isGoal = nx === ex && ny === ey;
       if (occ[nk] && !isGoal) continue;
-      const ng = g[ck] + 1;
+      const ng = g[ck] + d.c;
       if (ng < g[nk]) {
         came[nk] = ck;
         g[nk] = ng;
-        open.push({ x: nx, y: ny, f: ng + Math.abs(nx - ex) + Math.abs(ny - ey) });
+        open.push({ x: nx, y: ny, f: ng + _octile(nx - ex, ny - ey) });
       }
     }
   }

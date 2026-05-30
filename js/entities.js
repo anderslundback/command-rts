@@ -82,6 +82,9 @@ export class Unit extends Ent {
     this.captureProgress     = 0;
     this.repairBuildingTarget = null;
     this.grounded            = 0;
+    this.scoopEvent          = 0; // game tick when harvester last picked up ore (for scoop animation)
+    this.dumpEvent           = 0; // game tick when harvester last dumped at refinery (for tip animation)
+    this.chassisFacing       = 0; // body/hull direction (tracks movement); separate from facing (aim)
   }
 }
 

@@ -84,7 +84,8 @@ loop() [requestAnimationFrame / setTimeout when tab hidden]
 | `js/placement.js` | `canPlace`, `placeBuilding`, `spawnUnit`, `deployMcvInPlace` |
 | `js/combat.js` | `dealDmg`, `dealSplash`, `autoAttack`; pushes `state.damageNumbers`; sets `state.underAttackTimer` |
 | `js/units.js` | `updateUnit`, `updateAirUnit`; handles idle/move/attack/attack_move/patrol/harvest/return states; `dequeueNext` for shift-queue |
-| `js/pathfinding.js`, `js/resources.js` | Pure helpers |
+| `js/pathfinding.js` | 8-direction A* (`astar`, `astarNaval`) — cardinals cost 1, diagonals cost √2; octile heuristic; corner-cut prevention; per-tick occupancy cache |
+| `js/resources.js` | Pure power/credit helpers |
 | `js/particles.js`, `js/audio.js` | Cosmetic effects and voice lines |
 | `js/shells.js` | Projectile simulation and collision |
 | `js/fog.js` | Fog-of-war bitmap |
@@ -111,9 +112,13 @@ loop() [requestAnimationFrame / setTimeout when tab hidden]
 
 **Pause:** Right-click empty ground OR Escape (when nothing to cancel) → `togglePause()`. While paused, right-click cancels the front queue item (full refund). Left-click on canvas resumes.
 
-**Rollback snapshot discipline:** `snapshotEnt` in `lockstep.js` must copy every per-entity field that game logic writes. Currently: `path`, `trainQ`, `harvestTile`, `waypoint`, `orderQueue`, `atkMoveDest`, `patrolA`, `patrolB`. If you add a new mutable field to `Unit` or `Building`, add it to `snapshotEnt`/`restoreEnt` or rollback will diverge.
+**Rollback snapshot discipline:** `snapshotEnt` in `lockstep.js` walks `for (const k in e)` so primitive own properties (e.g. `facing`, `chassisFacing`, `scoopEvent`, `dumpEvent`) are captured automatically. The explicit allowlist after the for-in is for **reference fields that must be cloned**, currently: `path`, `trainQ`, `harvestTile`, `waypoint`, `orderQueue`, `atkMoveDest`, `patrolA`, `patrolB`, `cargo`. If you add a new mutable **object/array** field to `Unit` or `Building`, add it to `snapshotEnt`/`restoreEnt` or rollback will mutate the snapshot in place. Primitive fields just work.
 
 **Cosmetic vs. simulation state:** `state.damageNumbers` and `state.particles` are cosmetic — updated per render frame in `loop()`, not in `gameTick()`, and never snapshotted. `state.underAttackTimer` is simulation state (decremented in `gameTick()`), but only set for the local player's buildings and gated on `!state.isRollingBack` in `combat.js`, so it stays client-local.
+
+**Animation event-stamps:** Entity fields like `e.doorEvent`, `u.scoopEvent`, `u.dumpEvent` are tick stamps written from inside `gameTick` (so they're deterministic across clients) and read by the renderer as `tick - eventTick` to drive a finite animation window. They're primitives so the for-in in `snapshotEnt` captures them — rollback restores them automatically. Don't gate the write on `!state.isRollingBack`: replays must produce the same stamps so the animation lands at the same render tick on every client.
+
+**Chassis vs aim:** `u.chassisFacing` is the body/hull direction (updated in `stepPath` from the next path tile's `atan2`). `u.facing` is the gun/turret aim direction (updated in `combat.js` and the `attack` state when locked onto a target). Vehicle renderers draw the chassis with `chassisFacing` and the turret/barrel with `facing` so chassis can lead the movement while the gun tracks targets. For chassis-only units (harvester, mcv, v2), use `chassisFacing` for the whole body. For aircraft, the air-pathless mover sets both to the same value.
 
 **PRNG:** All game-logic randomness uses `state.rng()` (set by `startGame`/`startNetGame`). Cosmetic randomness in `particles.js`, `audio.js`, and tile rendering can use `Math.random()`. Never use `Math.random()` in `ai.js`, `map.js`, or anywhere that runs inside `gameTick()`.
 

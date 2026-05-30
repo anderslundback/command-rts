@@ -10,7 +10,8 @@ A browser-based real-time strategy game rendered entirely with Canvas 2D — no 
 - **Skirmish mode** — single-player vs. two AI opponents on a randomly seeded procedural map
 - **Internet multiplayer** — up to three human players; deterministic rollback netcode keeps all clients in sync with zero input delay
 - **Fog of war** and minimap radar
-- **All graphics procedural** — no external image assets; everything is Canvas 2D geometry and fill
+- **All graphics procedural** — no external image assets; everything is Canvas 2D geometry and fill, rendered with a Red Alert–style oblique-iso projection (buildings show front + side + roof; vehicles render as 3D boxes that rotate with movement)
+- **8-direction movement** — ground vehicles and naval units pathfind with diagonals on a √2-weighted 8-direction A*; turrets aim independently of the chassis
 - **Replays** — save and watch back any multiplayer match
 - **Combat feedback** — floating damage numbers, attack range rings, "under attack" screen alert
 

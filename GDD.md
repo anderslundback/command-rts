@@ -169,8 +169,9 @@ Aircraft have `air` armor type. Ground weapons deal 0–25% damage vs. aircraft;
 
 ### Targeting and Movement
 
-- Ground units move tile-by-tile on the 80×60 grid using A* pathfinding respecting impassable tiles (water, occupied tiles).
+- Ground units move tile-by-tile on the 80×60 grid using 8-direction A* pathfinding (cardinals + diagonals, √2 cost for diagonals) respecting impassable tiles (water, occupied tiles). Diagonal corner-cutting through walls is blocked.
 - Air units move pixel-by-pixel; no pathfinding — fly directly over terrain.
+- Vehicle chassis rotates to face movement direction; turret/barrel tracks the attack target independently (cruiser fore/aft turrets aim independently of hull).
 - Attack-move (A+RMB or A key then click): units move and auto-engage any enemy en route, then hold position at destination.
 - Patrol (P+click): units move between patrol start and destination, auto-engaging enemies along the path.
 - Shift+RMB queues orders (move or attack) rather than replacing the current one.
