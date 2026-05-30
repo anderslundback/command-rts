@@ -128,6 +128,20 @@ export function applyCommand(cmd) {
       for (const id of cmd.ids) { const u = state.entById.get(id); if (u && t && !u.dead) orderAttack(u, t, cmd.queued); }
       break;
     }
+    case 'set_ally': {
+      // Issued by the diplomacy panel. Sets a directional alliance bit; mutual
+      // status is computed at read time (see areAllied in resources.js).
+      const f = cmd.faction | 0, g = cmd.target | 0;
+      if (f >= 0 && f < 3 && g >= 0 && g < 3 && f !== g) {
+        state.alliances[f][g] = cmd.on ? 1 : 0;
+      }
+      break;
+    }
+    case 'set_allied_victory': {
+      const f = cmd.faction | 0;
+      if (f >= 0 && f < 3) state.alliedVictory[f] = !!cmd.on;
+      break;
+    }
     case 'load_transport': {
       const transport = state.entById.get(cmd.transportId);
       if (!transport || transport.dead || !transport.capacity) break;

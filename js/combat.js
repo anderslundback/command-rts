@@ -1,6 +1,6 @@
 import { TS, FDATA, ARMOR_MULT } from './constants.js';
 import { state } from './state.js';
-import { calcPower } from './resources.js';
+import { calcPower, areAllied } from './resources.js';
 import { spawnExplosion, spawnMuzzle } from './particles.js';
 import { speak } from './audio.js';
 import { distToEnt } from './pathfinding.js';
@@ -71,6 +71,8 @@ export function dealSplash(cx, cy, baseDmg, radiusPx, attacker) {
   const rt = ((radiusPx / TS) | 0) + 1;
   queryRect(tx - rt, ty - rt, tx + rt, ty + rt, (e) => {
     if (e.dead || e.loaded) return;
+    // No friendly fire on allies (covers own faction too — areAllied returns true for self).
+    if (attacker && areAllied(attacker.faction, e.faction)) return;
     const ex = e.isBuilding ? (e.x + e.w / 2) * TS : e.px + TS / 2;
     const ey = e.isBuilding ? (e.y + e.h / 2) * TS : e.py + TS / 2;
     const dx = ex - cx, dy = ey - cy;

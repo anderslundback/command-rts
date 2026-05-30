@@ -1,6 +1,7 @@
-import { MW, MH } from './constants.js';
+import { MW, MH, ARMOR_MULT } from './constants.js';
 import { state } from './state.js';
 import { distToEnt } from './pathfinding.js';
+import { areAllied } from './resources.js';
 
 // Uniform spatial bucket grid over the 80×60 tile map. Cells are 8×8 tiles → 10×8 = 80 buckets.
 // Rebuilt once per tick from state.entities IN ARRAY ORDER (the canonical deterministic order),
@@ -87,6 +88,12 @@ export function entsAtTile(tx, ty, cb) {
 // Reproduces the old "nearest enemy in range" full scans: nearest enemy with
 // distToEnt(u,e) < maxRange + pad, ties broken by first-in-entities-order (smaller _gi).
 // autoAttack used pad 0.1; attack_move/patrol used pad 0.5.
+//
+// Now also respects:
+//   • alliances (state.alliances via areAllied) — same-faction OR mutually-allied are skipped
+//   • damage matrix (ARMOR_MULT[weapon][armor]) — targets we can't damage are skipped so a
+//     destroyer (torpedo) doesn't auto-target infantry it does 0 damage to.
+// Force-attack bypasses both because it calls orderAttack directly without consulting this.
 export function nearestEnemy(u, maxRange, pad = 0.1) {
   const r = Math.ceil(maxRange + pad) + 1;
   const cx0 = Math.max(0, ((u.x - r) / CELL) | 0), cx1 = Math.min(GW - 1, ((u.x + r) / CELL) | 0);
@@ -94,6 +101,8 @@ export function nearestEnemy(u, maxRange, pad = 0.1) {
   const limit = maxRange + pad;
   let best = null, bd = limit, bgi = 0;
   const s = ++_stamp;
+  const wt = u.weaponType;
+  const wMat = wt ? ARMOR_MULT[wt] : null;
   for (let cy = cy0; cy <= cy1; cy++) {
     for (let cx = cx0; cx <= cx1; cx++) {
       const bucket = _buckets[cy * GW + cx];
@@ -101,7 +110,15 @@ export function nearestEnemy(u, maxRange, pad = 0.1) {
         const e = bucket[i];
         if (e._qs === s) continue;
         e._qs = s;
-        if (e.dead || e.loaded || e.faction === u.faction) continue;
+        if (e.dead || e.loaded) continue;
+        if (areAllied(u.faction, e.faction)) continue;
+        // Skip targets this weapon can't damage (torpedo vs infantry etc.) so
+        // the unit doesn't waste its aspd clock on whiffs. <=0.05 is the
+        // sub-trickle safety threshold.
+        if (wMat && e.armorType) {
+          const mult = wMat[e.armorType] ?? 1.0;
+          if (mult <= 0.05) continue;
+        }
         const d = distToEnt(u, e);
         if (d < bd || (d === bd && best !== null && e._gi < bgi)) {
           bd = d; best = e; bgi = e._gi;

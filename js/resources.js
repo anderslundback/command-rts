@@ -19,6 +19,19 @@ export function calcPower() {
 
 export function hasPwr(f) { return state.powerGen[f] >= state.powerUsed[f]; }
 
+// Mutual alliance check. Self always counts as allied. The diplomacy panel
+// drives state.alliances via the set_ally command; an alliance is only in
+// effect when BOTH factions have marked each other.
+export function areAllied(f, g) {
+  if (f === g) return true;
+  const a = state.alliances;
+  return !!(a && a[f] && a[g] && a[f][g] && a[g][f]);
+}
+
+export function areEnemies(f, g) {
+  return !areAllied(f, g);
+}
+
 export function getPowerRatio(f) {
   if (state.powerUsed[f] === 0) return 1;
   return Math.min(1, state.powerGen[f] / state.powerUsed[f]);

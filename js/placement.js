@@ -53,6 +53,41 @@ export function spawnUnit(f, type, tx, ty) {
   return u;
 }
 
+// Stable-sort candidate spawn tiles so the one nearest the building's waypoint
+// direction is tried first. Without this, naval yards (and factories) spawn out
+// of whichever side the iteration happens to hit first — typically NW — and
+// units can get stranded if the waypoint points the other way and the
+// "default" side has no water/passable diagonal escape.
+function _sortByWaypoint(building, candidates) {
+  if (!building.waypoint) return candidates;
+  const cx = building.x + building.w / 2;
+  const cy = building.y + building.h / 2;
+  const dx = building.waypoint.tx - cx;
+  const dy = building.waypoint.ty - cy;
+  // Stable sort: each candidate gets its original index as the tie-break so the
+  // result is deterministic across clients.
+  return candidates
+    .map((p, i) => ({ p, i, score: (p.x - cx) * dx + (p.y - cy) * dy }))
+    .sort((a, b) => (b.score - a.score) || (a.i - b.i))
+    .map(o => o.p);
+}
+
+function _gatherPerimeter(building) {
+  const out = [];
+  // Top + bottom rows extending one tile beyond the corners so vehicles
+  // can squeeze out diagonally too.
+  for (let i = -2; i <= building.w + 1; i++) {
+    out.push({ x: building.x + i, y: building.y - 1 });
+    out.push({ x: building.x + i, y: building.y + building.h });
+  }
+  // Left + right columns.
+  for (let i = 0; i < building.h; i++) {
+    out.push({ x: building.x - 1, y: building.y + i });
+    out.push({ x: building.x + building.w, y: building.y + i });
+  }
+  return out;
+}
+
 export function spawnNear(f, type, building) {
   // Training buildings: prefer the door tile (bottom-center) so units walk out the door
   if (building.type === 'barracks' || building.type === 'factory' || building.type === 'airfield') {
@@ -62,21 +97,9 @@ export function spawnNear(f, type, building) {
     if (trySpawn(f, type, doorX - 1, doorY)) return state.entities[state.entities.length - 1];
     if (trySpawn(f, type, doorX + 1, doorY)) return state.entities[state.entities.length - 1];
   }
-  for (let i = -2; i <= building.w + 1; i++) {
-    for (const pos of [
-      { x: building.x + i, y: building.y - 1 },
-      { x: building.x + i, y: building.y + building.h },
-    ]) {
-      if (trySpawn(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
-    }
-  }
-  for (let i = 0; i < building.h; i++) {
-    for (const pos of [
-      { x: building.x - 1, y: building.y + i },
-      { x: building.x + building.w, y: building.y + i },
-    ]) {
-      if (trySpawn(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
-    }
+  const perimeter = _sortByWaypoint(building, _gatherPerimeter(building));
+  for (const pos of perimeter) {
+    if (trySpawn(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
   }
   return null;
 }
@@ -103,21 +126,20 @@ export function deployMcvInPlace(mcv) {
 }
 
 export function spawnNearNaval(f, type, building) {
+  // Naval yard: gather a tight perimeter of candidate water tiles, then sort by
+  // dot-product with the building's waypoint direction so the destroyer
+  // surfaces on the side closest to where the player told it to go.
+  const candidates = [];
   for (let i = -1; i <= building.w; i++) {
-    for (const pos of [
-      { x: building.x + i, y: building.y - 1 },
-      { x: building.x + i, y: building.y + building.h },
-    ]) {
-      if (trySpawnNaval(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
-    }
+    candidates.push({ x: building.x + i, y: building.y - 1 });
+    candidates.push({ x: building.x + i, y: building.y + building.h });
   }
   for (let i = 0; i < building.h; i++) {
-    for (const pos of [
-      { x: building.x - 1, y: building.y + i },
-      { x: building.x + building.w, y: building.y + i },
-    ]) {
-      if (trySpawnNaval(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
-    }
+    candidates.push({ x: building.x - 1, y: building.y + i });
+    candidates.push({ x: building.x + building.w, y: building.y + i });
+  }
+  for (const pos of _sortByWaypoint(building, candidates)) {
+    if (trySpawnNaval(f, type, pos.x, pos.y)) return state.entities[state.entities.length - 1];
   }
   return null;
 }

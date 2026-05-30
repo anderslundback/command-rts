@@ -4,14 +4,38 @@ import { getTile, nearestOre } from './map.js';
 import { T } from './constants.js';
 import { getEnt } from './entities.js';
 import { astar, astarNaval, adjTile, adjToBuilding, distToEnt } from './pathfinding.js';
-import { nearestRefinery, hasPwr, calcPower } from './resources.js';
+import { nearestRefinery, hasPwr, calcPower, areAllied, areEnemies } from './resources.js';
 import { dealDmg, dealSplash, autoAttack } from './combat.js';
 import { spawnShell } from './shells.js';
 import { spawnMuzzle } from './particles.js';
-import { orderHarvest, orderMove, orderAttack, orderAttackMove, orderPatrol } from './orders.js';
+import { orderHarvest, orderMove, orderAttack, orderAttackMove, orderPatrol, findHarvesterTarget } from './orders.js';
 import { nearestEnemy, entsAtTile, queryRadius } from './spatial.js';
 import { playShot, playCash } from './audio.js';
 
+// RA-style ore-truck pacing: harvester parks at the ore tile for this many ticks
+// while the scoop arm cycles before the tile is depleted. 50 ticks ≈ 2.5 s at
+// 20 Hz, roughly two scoop swings.
+const HARVEST_TICKS = 50;
+// How often to re-stamp scoopEvent during the dig so the renderer's single
+// scoop cycle repeats over the whole HARVEST_TICKS window.
+const SCOOP_PERIOD = 25;
+
+// Periodic re-paths during attack/return/etc. recompute the path every N ticks
+// to react to new obstacles. Naively resetting u.mprog snaps the unit back to
+// its current tile, which is fine when the next step changed direction — but
+// catastrophic when the new path's first step matches the old one. A diagonal
+// step at harvester speed (1.4) takes ~32 ticks; the 30-tick re-path window
+// would otherwise reset mprog before the step completes, leaving the unit
+// stuck in place bouncing back to its origin. Preserve mprog when the next
+// tile is unchanged so long steps can finish across re-path windows.
+function repath(u, newPath) {
+  const oldNext = u.path && u.path[0];
+  const newNext = newPath && newPath[0];
+  if (!oldNext || !newNext || oldNext.x !== newNext.x || oldNext.y !== newNext.y) {
+    u.mprog = 0;
+  }
+  u.path = newPath || [];
+}
 
 export function updateUnit(u) {
   if (u.armorType === 'air')   { updateAirUnit(u);   return; }
@@ -87,7 +111,7 @@ export function updateUnit(u) {
         }
         if (u.captureTarget) {
           const b = getEnt(u.captureTarget);
-          if (b && !b.dead && b.faction !== u.faction && adjToBuilding(u.x, u.y, b)) {
+          if (b && !b.dead && areEnemies(b.faction, u.faction) && adjToBuilding(u.x, u.y, b)) {
             u.state = 'capture'; break;
           }
           u.captureTarget = null;
@@ -188,7 +212,7 @@ export function updateUnit(u) {
       } else {
         if (!u.path.length || state.tick % 20 === 0) {
           const dest = tgt.isBuilding ? adjTile(tgt, u.x, u.y) : { x: tgt.x, y: tgt.y };
-          if (dest) u.path = astar(u.x, u.y, dest.x, dest.y, false);
+          if (dest) repath(u, astar(u.x, u.y, dest.x, dest.y, false));
         }
         stepPath(u);
       }
@@ -198,22 +222,38 @@ export function updateUnit(u) {
     case 'harvest': {
       const ht = u.harvestTile;
       if (!ht || getTile(ht.x, ht.y) !== T.ORE) {
+        u.harvestTimer = 0;
         const found = findReachableOre(u);
         if (found) { u.harvestTile = found.tile; u.path = found.path; u.mprog = 0; }
         else u.state = 'idle';
         break;
       }
       if (u.x === ht.x && u.y === ht.y) {
-        u.ore += 30;
-        u.scoopEvent = state.tick;
-        state.map[ht.y][ht.x] = T.GRASS;
-        state.mapDirty = true;
-        if (u.ore >= u.maxOre) {
-          startReturn(u);
+        // RA-style: harvester parks at the tile and digs for HARVEST_TICKS ticks
+        // (~2.5s at 20 Hz) while the scoop arm cycles. Tile only flips to GRASS
+        // when the timer expires.
+        if (u.harvestTimer === 0) {
+          u.harvestTimer = HARVEST_TICKS;
+          u.scoopEvent = state.tick;
         } else {
-          const found = findReachableOre(u);
-          if (found) { u.harvestTile = found.tile; u.path = found.path; u.mprog = 0; }
-          else startReturn(u);
+          u.harvestTimer--;
+          // Re-stamp scoopEvent so the renderer's 30-tick scoop loops a couple
+          // of times across the full dig duration.
+          if (u.harvestTimer > 0 && (HARVEST_TICKS - u.harvestTimer) % SCOOP_PERIOD === 0) {
+            u.scoopEvent = state.tick;
+          }
+          if (u.harvestTimer === 0) {
+            u.ore += 30;
+            state.map[ht.y][ht.x] = T.GRASS;
+            state.mapDirty = true;
+            if (u.ore >= u.maxOre) {
+              startReturn(u);
+            } else {
+              const found = findReachableOre(u);
+              if (found) { u.harvestTile = found.tile; u.path = found.path; u.mprog = 0; }
+              else startReturn(u);
+            }
+          }
         }
       } else {
         stepPath(u);
@@ -242,7 +282,7 @@ export function updateUnit(u) {
       } else {
         if (!u.path.length || state.tick % 30 === 0) {
           const dest = adjTile(ref, u.x, u.y);
-          if (dest) { u.path = astar(u.x, u.y, dest.x, dest.y, false); u.mprog = 0; }
+          if (dest) repath(u, astar(u.x, u.y, dest.x, dest.y, false));
         }
         stepPath(u);
       }
@@ -256,7 +296,7 @@ export function updateUnit(u) {
     const r = Math.ceil(u.range) + 1;
     let best = null, bgi = Infinity;
     queryRadius(u.x, u.y, r, (e) => {
-      if (e.dead || e.loaded || e === u || e.faction !== u.faction || !e.isUnit) return;
+      if (e.dead || e.loaded || e === u || !areAllied(e.faction, u.faction) || !e.isUnit) return;
       if (e.armorType !== 'infantry' || e.hp >= e.maxHp) return;
       if (distToEnt(u, e) <= u.range && e._gi < bgi) { best = e; bgi = e._gi; }
     });
@@ -268,7 +308,7 @@ export function updateUnit(u) {
     const r = Math.ceil(u.range) + 1;
     let best = null, bgi = Infinity;
     queryRadius(u.x, u.y, r, (e) => {
-      if (e.dead || e.loaded || e === u || e.faction !== u.faction || !e.isUnit) return;
+      if (e.dead || e.loaded || e === u || !areAllied(e.faction, u.faction) || !e.isUnit) return;
       if (!VEHICLE_TYPES.has(e.type) || e.hp >= e.maxHp) return;
       if (distToEnt(u, e) <= u.range && e._gi < bgi) { best = e; bgi = e._gi; }
     });
@@ -377,7 +417,7 @@ function updateNavalUnit(u) {
         if (!u.path.length || state.tick % 20 === 0) {
           const tx = tgt.isBuilding ? tgt.x + (tgt.w >> 1) : tgt.x;
           const ty = tgt.isBuilding ? tgt.y + (tgt.h >> 1) : tgt.y;
-          u.path = astarNaval(u.x, u.y, tx, ty, false);
+          repath(u, astarNaval(u.x, u.y, tx, ty, false));
         }
         if (u.path.length) stepPath(u);
       }
@@ -476,17 +516,11 @@ function moveAirToward(u, destPx, destPy) {
   u.y = (u.py / TS) | 0;
 }
 
-function findReachableOre(u) {
-  const exclude = new Set();
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const ore = nearestOre(u.x, u.y, exclude);
-    if (!ore) return null;
-    const path = astar(u.x, u.y, ore.x, ore.y, true);
-    if (path.length > 0) return { tile: ore, path };
-    exclude.add(ore.y * 80 + ore.x);
-  }
-  return null;
-}
+// Re-exported from orders.js so the existing call sites in the harvest state
+// keep working without an extra import below. The shared helper picks an
+// unclaimed reachable ore tile, falling back to contention only when every
+// reachable tile is already targeted by another harvester.
+const findReachableOre = findHarvesterTarget;
 
 function startReturn(u) {
   // Manual assignment sticks; otherwise return to the nearest refinery from the
@@ -510,7 +544,7 @@ function stepPath(u) {
   });
   if (blocker) {
     if (VEHICLE_TYPES.has(u.type) &&
-        blocker.faction !== u.faction && blocker.armorType === 'infantry') {
+        areEnemies(blocker.faction, u.faction) && blocker.armorType === 'infantry') {
       dealDmg(blocker, blocker.maxHp + 1, u);
     } else {
       const waitLimit = (blocker.path && blocker.path.length > 0) ? 16 : 8;
@@ -522,8 +556,7 @@ function stepPath(u) {
         const dest = u.path[u.path.length - 1];
         const pfn = u.armorType === 'naval' ? astarNaval : astar;
         const np = pfn(u.x, u.y, dest.x, dest.y, false);
-        u.path = np.length ? np : pfn(u.x, u.y, dest.x, dest.y, true);
-        u.mprog = 0;
+        repath(u, np.length ? np : pfn(u.x, u.y, dest.x, dest.y, true));
       }
       return;
     }

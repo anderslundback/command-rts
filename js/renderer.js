@@ -332,7 +332,9 @@ function renderShells(ctx) {
 
 function renderVictoryAnnouncement(ctx, VW, VH) {
   const progress = 1 - state.gameOverDelay / 210;
-  const isWin = !state.factionEliminated[state.playerFaction];
+  const winners = state.gameWinners ?? [];
+  const isWin = winners.includes(state.playerFaction);
+  const isAllied = winners.length > 1;
   const color = isWin ? '#4dff88' : '#ff6644';
   ctx.fillStyle = `rgba(0,0,0,${Math.min(0.80, progress * 2.8)})`;
   ctx.fillRect(0, 0, VW, VH);
@@ -347,16 +349,31 @@ function renderVictoryAnnouncement(ctx, VW, VH) {
   ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 50;
   ctx.fillText(isWin ? 'VICTORY' : 'DEFEAT', 0, 0);
   ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.restore();
+  if (isWin && isAllied && progress > 0.20) {
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 18px monospace';
+    ctx.fillStyle = `rgba(120,220,160,${Math.min(1, (progress - 0.20) * 5) * textAlpha})`;
+    ctx.shadowColor = '#4dff88'; ctx.shadowBlur = 20;
+    ctx.fillText('· ALLIED ·', VW / 2, VH / 2 + 12);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
   if (progress > 0.38) {
     const subAlpha = Math.min(1, (progress - 0.38) * 5) * textAlpha;
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '16px monospace';
     ctx.fillStyle = `rgba(180,205,225,${subAlpha})`;
-    ctx.fillText(
-      isWin ? FDATA[state.playerFaction].name + ' wins the battle' : 'All structures destroyed',
-      VW / 2, VH / 2 + 36
-    );
+    let line;
+    if (isWin && isAllied) {
+      line = winners.map(f => FDATA[f].name).join(' + ') + ' share the victory';
+    } else if (isWin) {
+      line = FDATA[state.playerFaction].name + ' wins the battle';
+    } else {
+      line = 'All structures destroyed';
+    }
+    ctx.fillText(line, VW / 2, VH / 2 + 44);
     ctx.restore();
   }
 }

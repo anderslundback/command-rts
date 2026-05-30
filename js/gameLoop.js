@@ -6,6 +6,7 @@ import { updateBuilding, updateSidebarQueues } from './buildings.js';
 import { updateParticles } from './particles.js';
 import { updateShells } from './shells.js';
 import { tickOreRegen } from './map.js';
+import { areAllied } from './resources.js';
 import { updateFog } from './fog.js';
 import { render, renderMinimap } from './renderer.js';
 import { setMsg } from './hud.js';
@@ -313,15 +314,28 @@ function checkVictory() {
   for (const e of state.entities)
     if (!e.dead && e.isBuilding) alive[e.faction] = true;
 
-  const aliveCount = alive.filter(Boolean).length;
-  if (aliveCount > 1) return;
+  const aliveIds = [];
+  for (let f = 0; f < 3; f++) if (alive[f]) aliveIds.push(f);
+  if (aliveIds.length === 0) return; // shouldn't happen, but guard
+  if (aliveIds.length > 1) {
+    // Shared-victory path (StarCraft model): all surviving factions are
+    // mutually allied AND each one has alliedVictory opted-in. AI factions
+    // never opt in, so this only triggers when humans deliberately co-win.
+    const allMutual = aliveIds.every(f => aliveIds.every(g => areAllied(f, g)));
+    const allOptedIn = aliveIds.every(f => state.alliedVictory[f]);
+    if (!(allMutual && allOptedIn)) return;
+  }
 
   state.gameOver = true;
   state.gameOverDelay = 210;
+  state.gameWinners = aliveIds;
   state.gameStats.endTick = state.tick;
   recordPower();
   state.gameStats.powerHistory = [...state.gameStats.powerHistory];
-  speak(alive[state.playerFaction] ? 'Mission accomplished. Victory!' : 'Mission failed.');
+  const meWon = aliveIds.includes(state.playerFaction);
+  if (meWon && aliveIds.length > 1) speak('Mission accomplished. Allied victory.');
+  else if (meWon) speak('Mission accomplished. Victory!');
+  else speak('Mission failed.');
 }
 
 function _applyRenderAlpha(alpha) {

@@ -26,8 +26,14 @@ export function HUD(): React.ReactElement {
   const desync = useUIStore(s => s.desync);
   const netStall = useUIStore(s => s.netStall);
   const syncDebug = useUIStore(s => s.syncDebug);
+  const diplomacyOpen = useUIStore(s => s.diplomacyOpen);
 
   const [debugOpen, setDebugOpen] = useState(false);
+
+  const toggleDiplomacy = useCallback(() => {
+    _gs.diplomacyOpen = !_gs.diplomacyOpen;
+    syncFromGameState();
+  }, []);
 
   const toggleDebug = useCallback(() => {
     const opening = !debugOpen;
@@ -76,17 +82,17 @@ export function HUD(): React.ReactElement {
       </span>
 
       {/* Credits */}
-      <span style={{ color: '#8ab', fontSize: 11 }}>
-        <span style={{ color: '#668', fontSize: 10 }}>CREDITS </span>
-        <span style={{ color: '#fc4', fontWeight: 'bold' }}>
+      <span style={{ color: '#fff', fontSize: 11 }}>
+        <span style={{ color: '#ccc', fontSize: 10 }}>CREDITS </span>
+        <span style={{ color: '#ffd24a', fontWeight: 'bold' }}>
           {credits.toLocaleString()}
         </span>
       </span>
 
       {/* Power */}
-      <span style={{ color: '#8ab', fontSize: 11 }}>
-        <span style={{ color: '#668', fontSize: 10 }}>PWR </span>
-        <span style={{ color: powerOk ? '#fc4' : '#f44', fontWeight: 'bold' }}>
+      <span style={{ color: '#fff', fontSize: 11 }}>
+        <span style={{ color: '#ccc', fontSize: 10 }}>PWR </span>
+        <span style={{ color: powerOk ? '#ffd24a' : '#ff6a5a', fontWeight: 'bold' }}>
           {powerUsed}/{powerGen}
         </span>
       </span>
@@ -118,7 +124,7 @@ export function HUD(): React.ReactElement {
       {statusMsg && (
         <span
           style={{
-            color: '#9ab',
+            color: '#fff',
             fontSize: 11,
             flex: 1,
             overflow: 'hidden',
@@ -143,35 +149,53 @@ export function HUD(): React.ReactElement {
       )}
       {/* Multiplayer client: read-only label */}
       {!replayMode && netState.role !== 'none' && !lobby?.isHost && (
-        <span style={{ color: '#557', fontSize: 10, letterSpacing: 1, minWidth: 52, textAlign: 'center' }}>
+        <span style={{ color: '#ffd24a', fontSize: 10, letterSpacing: 1, minWidth: 52, textAlign: 'center' }}>
           {SPEED_LABELS[gameSpeed]}
         </span>
       )}
 
       {/* Net indicator */}
       {netState.role !== 'none' && (
-        <span style={{ color: '#3a5060', fontSize: 10, letterSpacing: 1 }}>
+        <span style={{ color: '#fff', fontSize: 10, letterSpacing: 1 }}>
           {lobby?.roomCode} NET {netState.latencyMs}ms
         </span>
       )}
 
       {/* Map seed */}
       {mapSeed != null && netState.role === 'none' && !replayMode && (
-        <span style={{ color: '#334', fontSize: 10, letterSpacing: 1 }}>
+        <span style={{ color: '#bbb', fontSize: 10, letterSpacing: 1 }}>
           SEED:{mapSeed.toString(16).toUpperCase().padStart(8, '0')}
         </span>
       )}
 
       {/* FPS counter */}
-      <span style={{ color: '#445', fontSize: 10 }}>{fps} FPS</span>
+      <span style={{ color: '#bbb', fontSize: 10 }}>{fps} FPS</span>
+
+      {/* Diplomacy panel toggle */}
+      <button
+        onClick={toggleDiplomacy}
+        title="Diplomacy — show all players and spectators (F1)"
+        style={{
+          background: diplomacyOpen ? '#0e1a2a' : 'none',
+          border: `1px solid ${diplomacyOpen ? '#4af' : '#5a4030'}`,
+          color: diplomacyOpen ? '#4af' : '#ffd24a',
+          cursor: 'pointer',
+          padding: '2px 8px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          lineHeight: 0,
+        }}
+      >
+        <HandshakeIcon size={20} />
+      </button>
 
       {/* Bug report */}
       <button
         onClick={() => openBugReport()}
         title="Report a bug"
         style={{
-          background: 'none', border: '1px solid #1e1a20',
-          color: '#443', cursor: 'pointer', fontSize: 9,
+          background: 'none', border: '1px solid #5a4030',
+          color: '#ffd24a', cursor: 'pointer', fontSize: 9,
           padding: '1px 5px', letterSpacing: 1,
         }}
       >
@@ -184,8 +208,8 @@ export function HUD(): React.ReactElement {
           onClick={toggleDebug}
           style={{
             background: debugOpen ? '#1a2a1a' : 'none',
-            border: `1px solid ${debugOpen ? '#3a6' : '#223'}`,
-            color: debugOpen ? '#3a6' : '#334',
+            border: `1px solid ${debugOpen ? '#3a6' : '#5a4030'}`,
+            color: debugOpen ? '#3a6' : '#ffd24a',
             cursor: 'pointer',
             fontSize: 9,
             padding: '1px 5px',
@@ -308,6 +332,35 @@ function SyncDebugPanel({ debug }: { debug: SyncDebugState }): React.ReactElemen
         </>
       )}
     </div>
+  );
+}
+
+// Stylized handshake glyph — two forearms angling inward to a pair of clasped
+// hands. Uses currentColor so it inherits the button's text colour (greyed when
+// inactive, faction-blue when the diplomacy panel is open).
+function HandshakeIcon({ size = 14 }: { size?: number }): React.ReactElement {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {/* Left forearm angling down-right toward the centre */}
+      <path d="M2 8 L9 13" />
+      {/* Right forearm angling down-left toward the centre */}
+      <path d="M22 8 L15 13" />
+      {/* The clasped hands — a horizontal pill at the meeting point */}
+      <path d="M9 13 a4 2.5 0 0 0 6 0 a4 2.5 0 0 0 -6 0" />
+      {/* Knuckle / thumb hint on each hand to read as fingers */}
+      <path d="M10 11.5 L11.5 10.5" />
+      <path d="M14 11.5 L12.5 10.5" />
+    </svg>
   );
 }
 

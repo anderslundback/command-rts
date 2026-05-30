@@ -152,6 +152,7 @@ export interface UIState {
   syncDebug: SyncDebugState | null;
   bugReportOpen: boolean;
   menuOpen: boolean;
+  diplomacyOpen: boolean;
   surrendered: boolean;
   spectating: boolean;
   isSpectator: boolean;
@@ -194,6 +195,7 @@ const initialState: UIState = {
   syncDebug: null,
   bugReportOpen: false,
   menuOpen: false,
+  diplomacyOpen: false,
   surrendered: false,
   spectating: false,
   isSpectator: false,
@@ -314,6 +316,7 @@ export function syncFromGameState(): void {
     netStall: !!(s.rollback?._stallStart != null && (performance.now() - (s.rollback._stallStart as number)) >= 150),
     syncDebug: s.syncDebug ? { ...s.syncDebug } : null,
     menuOpen: s.menuOpen ?? false,
+    diplomacyOpen: s.diplomacyOpen ?? false,
     surrendered: s.surrendered ?? false,
     spectating: s.spectating ?? false,
     isSpectator: s.isSpectator ?? false,

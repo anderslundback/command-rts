@@ -53,6 +53,14 @@ export const state = {
   volume: 0.5,
   _dirty: false,
   factionEliminated: [false, false, false],
+  gameWinners: null, // null until checkVictory triggers; [...factionIds] once the game ends
+  // alliances[f][g] === 1 → f considers g an ally. Mutual only counts when both
+  // directions are set. Self-cells (f===g) stay 1 so existing same-faction
+  // checks become a special case of areAllied().
+  alliances: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+  // Per-faction "I'm willing to share victory" opt-in. AI defaults to false so
+  // it cannot accidentally co-win when a human allies with it.
+  alliedVictory: [false, false, false],
   gameOverDelay: 0,
   gameStats: { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0, powerHistory: [] },
   fog: { explored: null, visible: null },
@@ -65,6 +73,7 @@ export const state = {
   patrolMode: false,
   forceAtkMode: false,
   menuOpen: false,
+  diplomacyOpen: false,
   replayMode: false,
   _replayEndTick: 0,
   _lastGroupKey: -1,

@@ -84,6 +84,7 @@ export class Unit extends Ent {
     this.grounded            = 0;
     this.scoopEvent          = 0; // game tick when harvester last picked up ore (for scoop animation)
     this.dumpEvent           = 0; // game tick when harvester last dumped at refinery (for tip animation)
+    this.harvestTimer        = 0; // ticks remaining to finish digging the current ore tile (RA-style)
     this.chassisFacing       = 0; // body/hull direction (tracks movement); separate from facing (aim)
   }
 }

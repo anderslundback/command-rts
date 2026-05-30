@@ -515,6 +515,11 @@ function onKey(ev) {
   if (state.paused && ev.key !== 'Escape') return;
   const SPD = 80;
   if (ev.key === 'Escape') {
+    if (state.diplomacyOpen) {
+      state.diplomacyOpen = false;
+      syncFromGameState();
+      return;
+    }
     if (state.net) {
       // Multiplayer: never pause via keyboard; Escape toggles the in-game menu overlay
       if (state.paused) {
@@ -578,6 +583,14 @@ function onKey(ev) {
         state._lastGroupTime = now;
         updateBuildPanel();
       }
+    }
+
+    // Diplomacy panel: F1 toggles the who's-in-the-game overlay
+    if (ev.key === 'F1') {
+      ev.preventDefault();
+      state.diplomacyOpen = !state.diplomacyOpen;
+      syncFromGameState();
+      return;
     }
 
     // Attack-move mode: A key

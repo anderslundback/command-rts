@@ -3,9 +3,50 @@ import { astar, astarNaval, adjTile } from './pathfinding.js';
 import { nearestOre } from './map.js';
 import { nearestRefinery } from './resources.js';
 
-import { TS } from './constants.js';
+import { TS, MW } from './constants.js';
 
 function _pf(u) { return u.armorType === 'naval' ? astarNaval : astar; }
+
+// Tiles currently targeted by OTHER live harvesters of the same faction. Used
+// so multiple harvesters don't all converge on the same ore tile while in
+// transit (wasted travel + repath thrash on arrival). Deterministic: iteration
+// over state.entities is in stable id order across clients.
+function _otherHarvesterClaims(self) {
+  const claims = new Set();
+  for (const e of state.entities) {
+    if (e.dead || e === self) continue;
+    if (!e.isUnit || e.type !== 'harvester') continue;
+    if (e.faction !== self.faction) continue;
+    if (!e.harvestTile) continue;
+    claims.add(e.harvestTile.y * MW + e.harvestTile.x);
+  }
+  return claims;
+}
+
+function _scanOre(u, exclude) {
+  // Up to 6 retries to skip unreachable tiles (e.g. ore behind a wall). Each
+  // miss is added to the local exclude so we keep walking outward.
+  const tried = new Set(exclude);
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const ore = nearestOre(u.x, u.y, tried);
+    if (!ore) return null;
+    const path = astar(u.x, u.y, ore.x, ore.y, true);
+    if (path.length > 0) return { tile: ore, path };
+    tried.add(ore.y * MW + ore.x);
+  }
+  return null;
+}
+
+// Picks the best reachable ore tile for `u`, preferring tiles no other
+// harvester is already targeting. Falls back to allowing contention only when
+// every reachable tile is claimed (e.g. small ore field with many harvesters).
+// Returns { tile, path } or null.
+export function findHarvesterTarget(u) {
+  const claims = _otherHarvesterClaims(u);
+  const unclaimed = _scanOre(u, claims);
+  if (unclaimed) return unclaimed;
+  return _scanOre(u, new Set());
+}
 
 export function orderMove(u, tx, ty, queued = false) {
   if (queued) {
@@ -68,13 +109,14 @@ export function orderHarvest(u, refinery) {
     u.manualRefinery = false;
     u.refineryId = (nearestRefinery(u.faction, u.x, u.y) || refinery).id;
   }
-  const ore = nearestOre(u.x, u.y);
-  if (ore) {
-    u.harvestTile = ore;
+  const found = findHarvesterTarget(u);
+  if (found) {
+    u.harvestTile = found.tile;
     u.state = 'harvest';
-    u.path = astar(u.x, u.y, ore.x, ore.y, true);
+    u.path = found.path;
     u.mprog = 0;
   } else {
+    u.harvestTile = null;
     u.state = 'idle';
   }
 }
@@ -89,11 +131,11 @@ export function orderReturnTo(u, refinery) {
     const dest = adjTile(refinery, u.x, u.y);
     if (dest) { u.path = astar(u.x, u.y, dest.x, dest.y, false); u.mprog = 0; }
   } else {
-    const ore = nearestOre(u.x, u.y);
-    if (ore) {
-      u.harvestTile = ore;
+    const found = findHarvesterTarget(u);
+    if (found) {
+      u.harvestTile = found.tile;
       u.state = 'harvest';
-      u.path = astar(u.x, u.y, ore.x, ore.y, true);
+      u.path = found.path;
       u.mprog = 0;
     } else {
       u.state = 'idle';

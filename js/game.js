@@ -277,6 +277,9 @@ function _resetGameState(playerFaction, startCredits) {
   state.buildReady = false;
   state.primaryBuilding = {};
   state.factionEliminated = [false, false, false];
+  state.alliances = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  state.alliedVictory = [false, false, false];
+  state.gameWinners = null;
   state.gameOverDelay = 0;
   state.gameStats = { unitsLost: 0, enemiesKilled: 0, startTick: 0, endTick: 0, powerHistory: [] };
   state.paused = false;

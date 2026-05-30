@@ -31,6 +31,9 @@ export function saveSnapshot(forDump = false) {
     hudDefQueue:   state.hudDefQueue.map(q => q.map(it => ({ ...it }))),
     shells: state.shells.map(s => ({ ...s })),
     factionEliminated: [...state.factionEliminated],
+    alliances: state.alliances.map(row => [...row]),
+    alliedVictory: [...state.alliedVictory],
+    gameWinners: state.gameWinners ? [...state.gameWinners] : null,
     gameOver: state.gameOver,
     gameOverDelay: state.gameOverDelay,
     gameStats: { unitsLost: state.gameStats.unitsLost, enemiesKilled: state.gameStats.enemiesKilled, startTick: state.gameStats.startTick, endTick: state.gameStats.endTick },
@@ -80,6 +83,13 @@ export function restoreSnapshot(snap) {
   state.hudDefQueue   = snap.hudDefQueue.map(q => q.map(it => ({ ...it })));
   state.shells = snap.shells.map(s => ({ ...s }));
   state.factionEliminated = [...snap.factionEliminated];
+  // Backwards-compatible restore: pre-alliance snapshots may not have these
+  // fields; fall through to identity matrix + opt-out defaults.
+  state.alliances = snap.alliances
+    ? snap.alliances.map(row => [...row])
+    : [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  state.alliedVictory = snap.alliedVictory ? [...snap.alliedVictory] : [false, false, false];
+  state.gameWinners = snap.gameWinners ? [...snap.gameWinners] : null;
   state.gameOver = snap.gameOver;
   state.gameOverDelay = snap.gameOverDelay;
   state.gameStats.unitsLost = snap.gameStats.unitsLost;
