@@ -124,6 +124,12 @@ export interface UIState {
   playerFaction: number;
   winnerFaction: number;
   winnerName: string;
+  // List of factions that won. For solo wins this has one element; for an
+  // allied shared victory it contains every surviving mutually-allied faction.
+  // Used by the post-game screen to render the right VICTORY/DEFEAT splash for
+  // each player (the legacy winnerFaction picks the first survivor, which is
+  // wrong from the perspective of any non-first ally).
+  gameWinners: number[] | null;
   gameStats: GameStats;
   credits: number;
   powerUsed: number;
@@ -167,6 +173,7 @@ const initialState: UIState = {
   playerFaction: 0,
   winnerFaction: -1,
   winnerName: '',
+  gameWinners: null,
   gameStats: { duration: 0, enemiesKilled: 0, unitsLost: 0, powerHistory: [] },
   credits: 0,
   powerUsed: 0,
@@ -231,16 +238,29 @@ export function syncFromGameState(): void {
     phase = s.paused ? 'paused' : 'playing';
   }
 
-  // Derive winner
+  // Derive winner: prefer the authoritative gameWinners list set by
+  // checkVictory (correctly captures allied co-winners), falling back to the
+  // legacy "first surviving faction" derivation only when gameWinners is null
+  // (e.g. older snapshots before this field existed).
   let winnerFaction = -1;
   let winnerName = '';
+  let gameWinners: number[] | null = null;
   if (s.gameOver) {
-    const alive: [boolean, boolean, boolean] = [false, false, false];
-    for (const e of s.entities) {
-      if (!e.dead && e.isBuilding) alive[e.faction as 0 | 1 | 2] = true;
+    if (Array.isArray(s.gameWinners) && s.gameWinners.length > 0) {
+      gameWinners = [...s.gameWinners];
+      winnerFaction = gameWinners[0];
+      winnerName = gameWinners.length > 1
+        ? gameWinners.map(f => FDATA[f].name).join(' + ')
+        : FDATA[winnerFaction].name;
+    } else {
+      const alive: [boolean, boolean, boolean] = [false, false, false];
+      for (const e of s.entities) {
+        if (!e.dead && e.isBuilding) alive[e.faction as 0 | 1 | 2] = true;
+      }
+      winnerFaction = alive.indexOf(true);
+      winnerName = winnerFaction >= 0 ? FDATA[winnerFaction].name : 'Draw';
+      gameWinners = winnerFaction >= 0 ? [winnerFaction] : null;
     }
-    winnerFaction = alive.indexOf(true);
-    winnerName = winnerFaction >= 0 ? FDATA[winnerFaction].name : 'Draw';
   }
 
   // Serialize selected entities
@@ -286,6 +306,7 @@ export function syncFromGameState(): void {
     playerFaction: f,
     winnerFaction,
     winnerName,
+    gameWinners,
     gameStats: {
       duration,
       enemiesKilled: s.gameStats?.enemiesKilled ?? 0,

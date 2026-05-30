@@ -16,6 +16,7 @@ export const net = {
     if (_ws) _ws.close();
     _ws = new WebSocket(url);
     _queue = [];
+    let opened = false;
 
     _ws.onmessage = e => {
       let msg;
@@ -25,6 +26,7 @@ export const net = {
     };
 
     _ws.onopen = () => {
+      opened = true;
       uiStore.setState(st => ({ net: { ...st.net, connected: true } }));
       for (const m of _queue) _ws.send(JSON.stringify(m));
       _queue = [];
@@ -36,8 +38,11 @@ export const net = {
     _ws.onclose = () => {
       clearInterval(_pingTimer);
       uiStore.setState(st => ({ net: { ...st.net, connected: false } }));
-      const set = handlers.get('_disconnect');
-      if (set) for (const fn of set) fn({});
+      // Distinguish "couldn't reach the server" from "we got disconnected
+      // mid-session" — the UI shows a different message for each.
+      const evType = opened ? '_disconnect' : '_connect_failed';
+      const set = handlers.get(evType);
+      if (set) for (const fn of set) fn({ url });
     };
 
     _ws.onerror = () => _ws?.close();

@@ -172,6 +172,7 @@ export function Menu(): React.ReactElement {
   const phase = useUIStore(s => s.phase);
   const winnerFaction = useUIStore(s => s.winnerFaction);
   const winnerName = useUIStore(s => s.winnerName);
+  const gameWinners = useUIStore(s => s.gameWinners);
   const playerFaction = useUIStore(s => s.playerFaction);
   const gameStats = useUIStore(s => s.gameStats);
 
@@ -222,9 +223,13 @@ export function Menu(): React.ReactElement {
     import('../game.js').catch(console.error); // register net callbacks before game_start fires
     net.connect(__WS_URL__);
 
-    const onCreated = (msg: any) => {
+    const cleanup = () => {
       net.off('room_created', onCreated);
       net.off('error', onNetError);
+      net.off('_connect_failed', onConnectFailed);
+    };
+    const onCreated = (msg: any) => {
+      cleanup();
       uiStore.setState({
         phase: 'lobby',
         lobby: {
@@ -239,12 +244,17 @@ export function Menu(): React.ReactElement {
       });
     };
     const onNetError = (msg: any) => {
-      net.off('room_created', onCreated);
-      net.off('error', onNetError);
+      cleanup();
       setNetError(msg.reason ?? 'Connection error');
+    };
+    const onConnectFailed = () => {
+      cleanup();
+      net.disconnect();
+      setNetError(`Can't reach the multiplayer server. Is it running? (start with: cd server && node server.js)`);
     };
     net.on('room_created', onCreated);
     net.on('error', onNetError);
+    net.on('_connect_failed', onConnectFailed);
     net.send({ type: 'create_room', name });
   };
 
@@ -256,9 +266,14 @@ export function Menu(): React.ReactElement {
     import('../game.js').catch(console.error); // register net callbacks before game_start fires
     net.connect(__WS_URL__);
 
-    const onJoined = (msg: any) => {
+    const cleanup = () => {
       net.off('room_joined', onJoined);
+      net.off('lobby_update', onLobbyUpdate);
       net.off('error', onNetError);
+      net.off('_connect_failed', onConnectFailed);
+    };
+    const onJoined = (msg: any) => {
+      cleanup();
       uiStore.setState({
         phase: 'lobby',
         lobby: {
@@ -273,9 +288,7 @@ export function Menu(): React.ReactElement {
       });
     };
     const onNetError = (msg: any) => {
-      net.off('room_joined', onJoined);
-      net.off('lobby_update', onLobbyUpdate);
-      net.off('error', onNetError);
+      cleanup();
       setNetError(msg.reason ?? 'Connection error');
     };
     const onLobbyUpdate = (msg: any) => {
@@ -283,13 +296,25 @@ export function Menu(): React.ReactElement {
         lobby: st.lobby ? { ...st.lobby, players: msg.players } : null,
       }));
     };
+    const onConnectFailed = () => {
+      cleanup();
+      net.disconnect();
+      setNetError(`Can't reach the multiplayer server. Is it running? (start with: cd server && node server.js)`);
+    };
     net.on('room_joined', onJoined);
     net.on('lobby_update', onLobbyUpdate);
     net.on('error', onNetError);
+    net.on('_connect_failed', onConnectFailed);
     net.send({ type: 'join_room', code, name });
   };
 
-  const isWin = phase === 'gameover' && winnerFaction === playerFaction;
+  // Use the authoritative gameWinners list (set by checkVictory) so shared-
+  // victory clients see VICTORY too. Fall back to the legacy single-winner
+  // comparison when gameWinners hasn't been populated (older snapshots).
+  const isWin = phase === 'gameover' && (
+    gameWinners ? gameWinners.includes(playerFaction) : winnerFaction === playerFaction
+  );
+  const isAlliedWin = phase === 'gameover' && !!gameWinners && gameWinners.length > 1;
 
   return (
     <div
@@ -517,7 +542,11 @@ export function Menu(): React.ReactElement {
           )}
 
           {netError && (
-            <div style={{ color: '#f64', fontSize: 11, letterSpacing: 1, marginTop: 8 }}>{netError}</div>
+            <div style={{
+              color: '#ff8a6a', fontSize: 11, letterSpacing: 1, marginTop: 8,
+              background: '#1a0808', border: '1px solid #5a1818',
+              padding: '6px 8px', lineHeight: 1.4,
+            }}>{netError}</div>
           )}
         </>
       )}
@@ -537,8 +566,21 @@ export function Menu(): React.ReactElement {
             {isWin ? 'VICTORY' : 'DEFEAT'}
           </div>
 
+          {isWin && isAlliedWin && (
+            <div style={{
+              color: '#9d8', fontSize: 14, letterSpacing: 4, marginBottom: 6,
+              textShadow: '0 0 12px rgba(120,220,160,0.5)',
+            }}>
+              · ALLIED ·
+            </div>
+          )}
+
           <div style={{ color: '#9ab', fontSize: 14, letterSpacing: 3, marginBottom: 20 }}>
-            {winnerFaction >= 0 ? `${winnerName} wins the battle` : 'All factions destroyed'}
+            {winnerFaction < 0
+              ? 'All factions destroyed'
+              : isAlliedWin
+                ? `${winnerName} share the victory`
+                : `${winnerName} wins the battle`}
           </div>
 
           <div style={{ width: 460, marginBottom: 20 }}>
